@@ -1,6 +1,9 @@
 package error
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 type Error struct {
 	message string
@@ -54,4 +57,26 @@ func (e *Error) Err(s error) *Error {
 	ne.source = e.source
 
 	return ne
+}
+
+func (e *Error) Error() string {
+	format := strings.Builder{}
+	format.WriteString("error: ")
+	format.WriteString(e.err.Error())
+
+	if e.message != "" {
+		format.WriteString(e.message)
+	}
+
+	if e.source != "" {
+		format.WriteString(" | src: ")
+		format.WriteString(e.source)
+	}
+
+	if e.err != nil {
+		format.WriteString(" | err: ")
+		format.WriteString(e.err.Error())
+	}
+
+	return format.String()
 }

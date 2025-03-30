@@ -12,3 +12,7 @@ type Server struct {
 	config  Config
 	stroage Storage
 }
+
+//func (s *Server) Init() (*Server, error) {
+
+//}
