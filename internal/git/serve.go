@@ -1,8 +1,8 @@
 package git
 
-import "github.com/GoldenDeals/DepGit/internal/stroage"
+type Storage interface{}
 
 type Server struct {
 	config  Config
-	stroage stroage.Stroage
+	storage Storage
 }

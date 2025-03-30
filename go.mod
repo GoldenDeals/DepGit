@@ -4,6 +4,8 @@ go 1.24.1
 
 tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 
+require github.com/google/uuid v1.6.0
+
 require (
 	4d63.com/gocheckcompilerdirectives v1.3.0 // indirect
 	4d63.com/gochecknoglobals v0.2.2 // indirect
