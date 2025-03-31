@@ -1,8 +1,6 @@
 package logger
 
 import (
-	"time"
-
 	"github.com/sirupsen/logrus"
 )
 
@@ -13,7 +11,6 @@ type customLogger struct {
 
 func (l customLogger) Format(entry *logrus.Entry) ([]byte, error) {
 	entry.Data["src"] = l.defaultField
-	entry = entry.WithTime(time.Now())
 	return l.formatter.Format(entry)
 }
 
