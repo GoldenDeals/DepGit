@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"log"
 	"time"
 
 	"github.com/gobwas/glob"
@@ -25,11 +26,11 @@ type User struct {
 type SSH_KEY_TYPE int
 
 const (
-	SSH_KEY_TYPE_RSA SSH_KEY_TYPE = iota + 1
-	// RSA_SHA2_256 SSSSH_KEY_TYPE
-	// RSA_SHA2_512 SSSSH_KEY_TYPE
-	// SSH_RSA  SSSSH_KEY_TYPE
-	// ECDSA_SHA2NISTP256 SSSSH_KEY_TYPE
+	SSH_KEY_TYPE_RSA    SSH_KEY_TYPE = iota + 1
+	RSA_SHA2_256        SSH_KEY_TYPE
+	RSA_SHA2_512        SSH_KEY_TYPE
+	SSH_RSA             SSH_KEY_TYPE
+	ECDSA_SHA2_NISTP256 SSH_KEY_TYPE
 	// .... TODO: Добавить еще
 )
 
@@ -66,20 +67,6 @@ type AccessRole struct {
 	Deleted time.Time
 }
 
-type DBa interface {
-	CreateRepo(repo *Repo) error
-	DeleteRepo(repoid IDT) error
-	UpdateRepo(repoid IDT, repo *Repo) error
-	GetRepo(repoid IDT) (*Repo, error)
-	GetRepos() ([]Repo, error)
-
-	// Это функции добавляющие пользователя в репозиторий
-	CreateAccessRole(ar *AccessRole) error
-	EditAccessRole(roleid IDT, ar *AccessRole)
-	DeleteAccessRole(roleid IDT) error
-	GetAccessRoles(repoid IDT) ([]AccessRole, error)
-}
-
 type AccessManager interface {
 	UserByKey(key []byte) (*User, error)
 	CheckPermissions(userid IDT, repoid IDT, branch string) (bool, error)
@@ -89,26 +76,25 @@ type DB struct {
 	db *sql.DB
 }
 
-func (d *DB) init() (err error) {
+func (d *DB) Init() (err error) {
 	d.db, err = sql.Open("sqlite3", "./migrations/access.db")
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return err
 	}
 	err = d.db.Ping()
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return err
 	}
-	logrus.Trace("Database access.db open")
+	logrus.Debug("Database access.db open")
 	return nil
 }
 
 func (d *DB) CreateUser(user *User) (err error) {
-	d.init()
 	statement, err := d.db.Prepare("INSERT INTO users (id, name, email, created, edited, deleted) VALUES (?,?,?,?,?)")
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return err
 	}
 	statement.Exec(user.ID.String(), user.Name, user.Created, user.Edited, user.Deleted)
@@ -119,7 +105,7 @@ func (d *DB) CreateUser(user *User) (err error) {
 func (d *DB) EditUser(userid IDT, user *User) error {
 	statement, err := d.db.Prepare("UPDATE users SET name = ? , email = ? , created = ?, edited = ?, deleted = ? WHERE id = ?")
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return err
 	}
 	statement.Exec(user.Name, user.Email, user.Created, user.Edited, user.Deleted, userid.String())
@@ -130,7 +116,7 @@ func (d *DB) EditUser(userid IDT, user *User) error {
 func (d *DB) DeleteUser(userid IDT) error {
 	statement, err := d.db.Prepare("DELETE FROM users WHERE id = ?")
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return err
 	}
 	statement.Exec(userid)
@@ -140,16 +126,12 @@ func (d *DB) DeleteUser(userid IDT) error {
 
 func (d *DB) GetUser(userid IDT) (User, error) {
 	var user User
-	row, err := d.db.Query("SELECT * FORM users WHERE id = ?", userid)
-	if err != nil {
-		logrus.Error("Error %s", err)
-		return user, err
-	}
+	row := d.db.QueryRow("SELECT * FORM users WHERE id = ?", userid)
 	var identif string
 	row.Scan(&identif, &user.Name, &user.Email, &user.Created, &user.Edited, &user.Deleted)
 	user.ID, err = uuid.FromString(identif)
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return user, err
 	}
 	logrus.Trace("get info about user", user)
@@ -160,7 +142,7 @@ func (d *DB) GetUsers() ([]User, error) {
 	users := make([]User, 0, 16)
 	row, err := d.db.Query("SELECT * FORM users ")
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return users, err
 	}
 	for row.Next() {
@@ -169,7 +151,7 @@ func (d *DB) GetUsers() ([]User, error) {
 		row.Scan(&user.ID, &user.Name, &user.Email, &user.Created, &user.Edited, &user.Deleted)
 		user.ID, err = uuid.FromString(identif)
 		if err != nil {
-			logrus.Error("Error %s", err)
+			log.Errorf("Error %s", err)
 			return users, err
 		}
 		users = append(users, user)
@@ -182,7 +164,7 @@ func (d *DB) GetUsers() ([]User, error) {
 func (d *DB) AddSshKey(userid IDT, key *SshKey) error {
 	statement, err := d.db.Prepare("INSERT INTO keys (id,user_id, name, type, data,  created, deleted) VALUES (?,?,?,?,?,?)")
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return err
 	}
 	statement.Exec(key.ID.String(), key.UserID.String(), key.Name, key.Type, key.Data, key.Created, key.Deleted)
@@ -193,7 +175,7 @@ func (d *DB) AddSshKey(userid IDT, key *SshKey) error {
 func (d *DB) DelSshKey(userid IDT, keyid IDT) error {
 	statement, err := d.db.Prepare("DELETE * FORM keys WHERE id = ?, AND WHERE user_id = ?")
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return err
 	}
 	statement.Exec(keyid, userid)
@@ -205,7 +187,7 @@ func (d *DB) GetSshKeys(userid IDT) ([]SshKey, error) {
 	keys := make([]SshKey, 0, 16)
 	row, err := d.db.Query("SELECT * FROM keys WHERE user_id = ?", userid)
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return keys, err
 	}
 	for row.Next() {
@@ -220,7 +202,7 @@ func (d *DB) GetSshKeys(userid IDT) ([]SshKey, error) {
 func (d *DB) CreateRepo(repo *Repo) error {
 	statement, err := d.db.Prepare("INSERT INTO permitions (id, name, created, deleted) VALUES (?, ?, ?, ?)")
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return err
 	}
 	statement.Exec(repo.ID, repo.Name, repo.Created, repo.Deleted)
@@ -231,7 +213,7 @@ func (d *DB) CreateRepo(repo *Repo) error {
 func (d *DB) DeleteRepo(repoid IDT) error {
 	statement, err := d.db.Prepare("DELETE * FORM permitions WHERE id = ?")
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return err
 	}
 	statement.Exec(repoid)
@@ -242,7 +224,7 @@ func (d *DB) DeleteRepo(repoid IDT) error {
 func (d *DB) UpdateRepo(repoid IDT, repo Repo) error {
 	statement, err := d.db.Prepare("UPDATE permitions SET name = ? , created = ?, deleted = ? WHERE id = ?")
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return err
 	}
 	statement.Exec(repo.Name, repo.Created, repo.Deleted, repo.ID.String())
@@ -250,22 +232,22 @@ func (d *DB) UpdateRepo(repoid IDT, repo Repo) error {
 	return nil
 }
 
-func (d *DB) GetRepo(repoid IDT) (*Repo, error) {
+func (d *DB) GetRepo(repoid IDT) (Repo, error) {
 	var repo Repo
 	row, err := d.db.Query("SELECT * FORM permitions WHERE id = ?", repoid)
 	if err != nil {
-		logrus.Error("Error %s", err)
-		return &repo, err
+		log.Errorf("Error %s", err)
+		return repo, err
 	}
 	var identif string
 	row.Scan(&identif, &repo.Name, &repo.Created, &repo.Deleted)
 	repo.ID, err = uuid.FromString(identif)
 	if err != nil {
-		logrus.Error("Error %s", err)
-		return &repo, err
+		log.Errorf("Error %s", err)
+		return repo, err
 	}
 	logrus.Trace("get info about Repositor ", repo)
-	return &repo, nil
+	return repo, nil
 }
 
 func (d *DB) GetRepos() ([]Repo, error) {
@@ -273,7 +255,7 @@ func (d *DB) GetRepos() ([]Repo, error) {
 	repos := make([]Repo, 0, 16)
 	row, err := d.db.Query("SELECT * FORM permitions ")
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return repos, err
 	}
 	for row.Next() {
@@ -282,7 +264,7 @@ func (d *DB) GetRepos() ([]Repo, error) {
 		row.Scan(&identif, &repo.Name, &repo.Created, &repo.Deleted)
 		repo.ID, err = uuid.FromString(identif)
 		if err != nil {
-			logrus.Error("Error %s", err)
+			log.Errorf("Error %s", err)
 			return repos, err
 		}
 		repos = append(repos, repo)
@@ -295,7 +277,7 @@ func (d *DB) GetRepos() ([]Repo, error) {
 func (d *DB) CreateAccessRole(ar *AccessRole) error {
 	statement, err := d.db.Prepare("INSERT INTO roles (role_id ,user_id, rep_id , branch, created, deleted) VALUES (?,?, ?,?, ?, ?)")
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return err
 	}
 	statement.Exec(ar.RoleID, ar.UserID, ar.RepoID, ar.Branches, ar.Created, ar.Deleted)
@@ -306,7 +288,7 @@ func (d *DB) CreateAccessRole(ar *AccessRole) error {
 func (d *DB) EditAccessRole(roleid IDT, ar *AccessRole) error {
 	statement, err := d.db.Prepare("UPDATE roles SET user_id = ?, rep_id = ?, branch = ?, created = ?, deleted = ? WHERE role_id = ?")
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return err
 	}
 	statement.Exec(ar.UserID.String(), ar.RepoID.String(), ar.Branches, ar.Created, ar.Deleted, ar.RoleID.String())
@@ -317,7 +299,7 @@ func (d *DB) EditAccessRole(roleid IDT, ar *AccessRole) error {
 func (d *DB) DeleteAccessRole(roleid IDT) error {
 	statement, err := d.db.Prepare("DELETE * FORM roles WHERE role_id = ?")
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return err
 	}
 	statement.Exec(roleid)
@@ -329,7 +311,7 @@ func (d *DB) GetAccessRole(roleid IDT) (AccessRole, error) {
 	var role AccessRole
 	row, err := d.db.Query("SELECT * FORM roles WHERE id = ?", roleid)
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return role, err
 	}
 	var identifRole, identifUser, identifReposit string
@@ -338,7 +320,7 @@ func (d *DB) GetAccessRole(roleid IDT) (AccessRole, error) {
 	role.UserID, err = uuid.FromString(identifUser)
 	role.RepoID, err = uuid.FromString(identifReposit)
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return role, err
 	}
 	logrus.Trace("get info about Role ", role)
@@ -349,7 +331,7 @@ func (d *DB) GetAccessRoles() ([]AccessRole, error) {
 	var roles []AccessRole
 	row, err := d.db.Query("SELECT * FORM roles ")
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return roles, err
 	}
 	for row.Next() {
@@ -360,7 +342,7 @@ func (d *DB) GetAccessRoles() ([]AccessRole, error) {
 		role.UserID, err = uuid.FromString(identifUser)
 		role.RepoID, err = uuid.FromString(identifReposit)
 		if err != nil {
-			logrus.Error("Error %s", err)
+			log.Errorf("Error %s", err)
 			return roles, err
 		}
 		logrus.Trace("get info about Role ", role)
@@ -372,7 +354,7 @@ func (d *DB) GetAccessRoles() ([]AccessRole, error) {
 func (d *DB) UserByKey(key []byte) (*User, error) {
 	err := d.init()
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return nil, err
 	}
 	// что делает и что выводит ?
@@ -382,18 +364,18 @@ func (d *DB) UserByKey(key []byte) (*User, error) {
 func (d *DB) CheckPermissions(userid IDT, repoid IDT, branch string) (bool, error) {
 	err := d.init()
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return false, err
 	}
 	row, err := d.db.Query("SELECT roleid FROM roles WHERE userid = ? AND WHERE repoid = ? AND WHERE branch = ?", userid.String(), repoid.String(), branch)
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return false, err
 	}
 	var roleid string
 	err = row.Scan(&roleid)
 	if err != nil {
-		logrus.Error("Error %s", err)
+		log.Errorf("Error %s", err)
 		return false, err
 	}
 	return true, err
