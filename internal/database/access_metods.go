@@ -454,18 +454,8 @@ func (d *DB) GetAccessRoles() ([]AccessRole, error) {
 func (d *DB) UserByKey(key []byte) (User, error) {
 	var user User
 	var err error
-	row := d.db.QueryRow("SELECT userid FROM keys WHERE key = ?", key) // что делает и что выводит ?
-	if err != nil {
-		log.Errorf("Error UserByKey ", key, err)
-		return user, err
-	}
+	row := d.db.QueryRow("SELECT userid.keys, users.name, users.email , users.created, users.edited, users.deleted FROM keys INNER JOIN users ON users.userid = keys.userid", key) // что делает и что выводит ?
 	var answer string
-	err = row.Scan(&answer)
-	if err != nil {
-		log.Errorf("Error Scan sql request ", key, err)
-		return user, err
-	}
-	row = d.db.QueryRow("SELECT * FROM users WHERE userid = ?", answer)
 	err = row.Scan(&answer, &user.Name, &user.Email, &user.Created, &user.Edited, &user.Deleted)
 	if err != nil {
 		log.Errorf("Error Scan sql request ", key, err)
