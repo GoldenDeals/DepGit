@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"time"
 
@@ -70,9 +71,9 @@ type AccessRole struct {
 	Deleted time.Time
 }
 
-type AccessManager interface {
-	UserByKey(key []byte) (*User, error)
-	CheckPermissions(userid IDT, repoid IDT, branch string) (bool, error)
+type Classes interface {
+	New()
+	Create()
 }
 
 type DB struct {
@@ -95,7 +96,17 @@ func (d *DB) Init() error {
 	return nil
 }
 
-func (d *DB) CreateUser(user *User) error {
+func (u *User) Create(name, email string) {
+	u.ID = uuid.New()
+	u.Name = name
+	u.Email = email
+	u.Created = time.Now()
+}
+
+func (d *DB) CreateUser(ctx context.Context, user *User) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	statement, err := d.db.Prepare("INSERT INTO users (id, name, email, created, edited, deleted) VALUES (?,?,?,?,?)")
 	if err != nil {
 		log.Errorf("Error Create User ", user.ID, err)
@@ -111,10 +122,13 @@ func (d *DB) CreateUser(user *User) error {
 	return nil
 }
 
-func (d *DB) EditUser(userid IDT, user *User) error {
+func (d *DB) EditUser(ctx context.Context, userid IDT, user *User) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	statement, err := d.db.Prepare("UPDATE users SET name = ? , email = ? , created = ?, edited = ?, deleted = ? WHERE id = ?")
 	if err != nil {
-		log.Errorf("Error edit user ", user.ID, err)
+		log.Errorf("Error edit user ", userid, err)
 		return err
 	}
 	_, err = statement.Exec(user.Name, user.Email, user.Created.Format(time.DateTime), time.Now().Format(time.DateTime), user.Deleted.Format(time.DateTime), userid.String())
@@ -122,11 +136,14 @@ func (d *DB) EditUser(userid IDT, user *User) error {
 		log.Errorf("Error Execute sql request ", err)
 		return err
 	}
-	logrus.Trace("Edit user", user.ID, user.Name)
+	logrus.Trace("Edit user", userid, user.Name)
 	return nil
 }
 
-func (d *DB) DeleteUser(userid IDT) error {
+func (d *DB) DeleteUser(ctx context.Context, userid IDT) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	statement, err := d.db.Prepare("DELETE FROM users WHERE id = ?")
 	if err != nil {
 		log.Errorf("Error delete User ", userid, err)
@@ -141,11 +158,14 @@ func (d *DB) DeleteUser(userid IDT) error {
 	return nil
 }
 
-func (d *DB) GetUser(userid IDT) (User, error) {
+func (d *DB) GetUser(ctx context.Context, userid IDT) (User, error) {
 	var user User
 	var err error
 	var identif string
 	var id IDT
+	if err := ctx.Err(); err != nil {
+		return user, err
+	}
 	row := d.db.QueryRow("SELECT * FORM users WHERE id = ?", userid)
 	err = row.Scan(&identif, &user.Name, &user.Email, &user.Created, &user.Edited, &user.Deleted)
 	if err != nil {
@@ -162,8 +182,11 @@ func (d *DB) GetUser(userid IDT) (User, error) {
 	return user, nil
 }
 
-func (d *DB) GetUsers() ([]User, error) {
+func (d *DB) GetUsers(ctx context.Context) ([]User, error) {
 	users := make([]User, 0, 16)
+	if err := ctx.Err(); err != nil {
+		return users, err
+	}
 	row, err := d.db.Query("SELECT * FORM users ")
 	if err != nil {
 		log.Errorf("Error GetUsers ", err)
@@ -187,7 +210,10 @@ func (d *DB) GetUsers() ([]User, error) {
 	return users, nil
 }
 
-func (d *DB) AddSshKey(userid IDT, key *SshKey) error {
+func (d *DB) AddSshKey(ctx context.Context, userid IDT, key *SshKey) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	var err error
 	statement, err := d.db.Prepare("INSERT INTO keys (id,user_id, name, type, key,  created, deleted) VALUES (?,?,?,?,?,?)")
 	if err != nil {
@@ -203,7 +229,10 @@ func (d *DB) AddSshKey(userid IDT, key *SshKey) error {
 	return nil
 }
 
-func (d *DB) DelSshKey(userid IDT, keyid IDT) error {
+func (d *DB) DelSshKey(ctx context.Context, userid IDT, keyid IDT) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	statement, err := d.db.Prepare("DELETE * FORM keys WHERE id = ?, AND WHERE user_id = ?")
 	if err != nil {
 		log.Errorf("Error DelSshKey ", userid, keyid, err)
@@ -218,8 +247,11 @@ func (d *DB) DelSshKey(userid IDT, keyid IDT) error {
 	return nil
 }
 
-func (d *DB) GetSshKeys(userid IDT) ([]SshKey, error) {
+func (d *DB) GetSshKeys(ctx context.Context, userid IDT) ([]SshKey, error) {
 	keys := make([]SshKey, 0, 16)
+	if err := ctx.Err(); err != nil {
+		return keys, err
+	}
 	row, err := d.db.Query("SELECT * FROM keys WHERE user_id = ?", userid)
 	if err != nil {
 		log.Errorf("Error GetSshKeys ", userid, err)
@@ -238,7 +270,10 @@ func (d *DB) GetSshKeys(userid IDT) ([]SshKey, error) {
 	return keys, nil
 }
 
-func (d *DB) CreateRepo(repo *Repo) error {
+func (d *DB) CreateRepo(ctx context.Context, repo *Repo) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	statement, err := d.db.Prepare("INSERT INTO permitions (id, name, created, edited ,deleted) VALUES (?, ?,?, ?, ?)")
 	if err != nil {
 		log.Errorf("Error Create Repo ", repo.ID, err)
@@ -254,7 +289,10 @@ func (d *DB) CreateRepo(repo *Repo) error {
 	return nil
 }
 
-func (d *DB) DeleteRepo(repoid IDT) error {
+func (d *DB) DeleteRepo(ctx context.Context, repoid IDT) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	statement, err := d.db.Prepare("DELETE * FORM permitions WHERE id = ?")
 	if err != nil {
 		log.Errorf("Error DeleteRepo ", repoid, err)
@@ -269,7 +307,10 @@ func (d *DB) DeleteRepo(repoid IDT) error {
 	return nil
 }
 
-func (d *DB) UpdateRepo(repoid IDT, repo Repo) error {
+func (d *DB) UpdateRepo(ctx context.Context, repoid IDT, repo Repo) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	statement, err := d.db.Prepare("UPDATE permitions SET name = ? , created = ?, deleted = ? WHERE id = ?")
 	if err != nil {
 		log.Errorf("Error UpdateRepo ", repoid, err)
@@ -284,8 +325,11 @@ func (d *DB) UpdateRepo(repoid IDT, repo Repo) error {
 	return nil
 }
 
-func (d *DB) GetRepo(repoid IDT) (Repo, error) {
+func (d *DB) GetRepo(ctx context.Context, repoid IDT) (Repo, error) {
 	var repo Repo
+	if err := ctx.Err(); err != nil {
+		return repo, err
+	}
 	row, err := d.db.Query("SELECT * FORM permitions WHERE id = ?", repoid)
 	if err != nil {
 		log.Errorf("Error GetRepo ", repoid, err)
@@ -308,9 +352,12 @@ func (d *DB) GetRepo(repoid IDT) (Repo, error) {
 	return repo, nil
 }
 
-func (d *DB) GetRepos() ([]Repo, error) {
+func (d *DB) GetRepos(ctx context.Context) ([]Repo, error) {
 	var err error
 	repos := make([]Repo, 0, 16)
+	if err := ctx.Err(); err != nil {
+		return repos, err
+	}
 	row, err := d.db.Query("SELECT * FORM permitions ")
 	if err != nil {
 		log.Errorf("Error GetRepos ", err)
@@ -338,7 +385,10 @@ func (d *DB) GetRepos() ([]Repo, error) {
 	return repos, nil
 }
 
-func (d *DB) CreateAccessRole(ar *AccessRole) error {
+func (d *DB) CreateAccessRole(ctx context.Context, ar *AccessRole) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	statement, err := d.db.Prepare("INSERT INTO roles (role_id ,user_id, rep_id , branch, created, deleted) VALUES (?,?, ?,?, ?, ?)")
 	if err != nil {
 		log.Errorf("Error CreateAccessRole ", ar.RepoID, ar.RepoID, ar.UserID, err)
@@ -354,7 +404,10 @@ func (d *DB) CreateAccessRole(ar *AccessRole) error {
 	return nil
 }
 
-func (d *DB) EditAccessRole(roleid IDT, ar *AccessRole) error {
+func (d *DB) EditAccessRole(ctx context.Context, roleid IDT, ar *AccessRole) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	statement, err := d.db.Prepare("UPDATE roles SET user_id = ?, rep_id = ?, branch = ?, created = ?, deleted = ? WHERE role_id = ?")
 	if err != nil {
 		log.Errorf("Error EditAccessRole ", roleid, err)
@@ -369,7 +422,7 @@ func (d *DB) EditAccessRole(roleid IDT, ar *AccessRole) error {
 	return nil
 }
 
-func (d *DB) DeleteAccessRole(roleid IDT) error {
+func (d *DB) DeleteAccessRole(ctx context.Context, roleid IDT) error {
 	statement, err := d.db.Prepare("DELETE * FORM roles WHERE role_id = ?")
 	if err != nil {
 		log.Errorf("Error DeleteAccessRole ", roleid, err)
@@ -384,7 +437,7 @@ func (d *DB) DeleteAccessRole(roleid IDT) error {
 	return nil
 }
 
-func (d *DB) GetAccessRole(roleid IDT) (AccessRole, error) {
+func (d *DB) GetAccessRole(ctx context.Context, roleid IDT) (AccessRole, error) {
 	var role AccessRole
 	var err error
 	row := d.db.QueryRow("SELECT * FORM roles WHERE id = ?", roleid)
@@ -414,7 +467,7 @@ func (d *DB) GetAccessRole(roleid IDT) (AccessRole, error) {
 	return role, nil
 }
 
-func (d *DB) GetAccessRoles() ([]AccessRole, error) {
+func (d *DB) GetAccessRoles(ctx context.Context) ([]AccessRole, error) {
 	var roles []AccessRole
 	row, err := d.db.Query("SELECT * FORM roles ")
 	if err != nil {
@@ -451,7 +504,7 @@ func (d *DB) GetAccessRoles() ([]AccessRole, error) {
 	return roles, nil
 }
 
-func (d *DB) UserByKey(key []byte) (User, error) {
+func (d *DB) UserByKey(ctx context.Context, key []byte) (User, error) {
 	var user User
 	var err error
 	row := d.db.QueryRow("SELECT userid.keys, users.name, users.email , users.created, users.edited, users.deleted FROM keys INNER JOIN users ON users.userid = keys.userid", key) // что делает и что выводит ?
@@ -461,10 +514,11 @@ func (d *DB) UserByKey(key []byte) (User, error) {
 		log.Errorf("Error Scan sql request ", key, err)
 		return user, err
 	}
+	logrus.Trace("get info user keys ", user, key)
 	return user, nil
 }
 
-func (d *DB) CheckPermissions(userid IDT, repoid IDT, branch string) (bool, error) {
+func (d *DB) CheckPermissions(ctx context.Context, userid IDT, repoid IDT, branch string) (bool, error) {
 	row, err := d.db.Query("SELECT roleid FROM roles WHERE userid = ? AND WHERE repoid = ? AND WHERE branch = ?", userid.String(), repoid.String(), branch)
 	if err != nil {
 		log.Errorf("Error CheckPermissions ", userid, repoid, branch, err)
@@ -476,5 +530,6 @@ func (d *DB) CheckPermissions(userid IDT, repoid IDT, branch string) (bool, erro
 		log.Errorf("Error CheckPermissions scan", userid, repoid, branch, roleid, err)
 		return false, err
 	}
+	logrus.Trace("get info permitions user ", userid)
 	return true, err
 }
