@@ -2,32 +2,27 @@ package git
 
 import (
 	"context"
-	"io"
 	"os"
 
 	"github.com/GoldenDeals/DepGit/internal/share/logger"
+	"github.com/GoldenDeals/DepGit/internal/stroage"
 	"github.com/gliderlabs/ssh"
 	gossh "golang.org/x/crypto/ssh"
 )
 
 var log = logger.New("git")
 
-type Storage interface {
-	Put(namespace string, objname string, obj io.Reader) error
-	Get(namespace string, objname string) (io.Reader, error)
-	List(namespace string) ([]string, error)
-}
-
 type Server struct {
-	config Config
-	srv    ssh.Server
-	//stroage Storage
+	config  Config
+	srv     ssh.Server
+	storage stroage.Storage
 }
 
-func Init(c Config) (*Server, error) {
+func Init(c Config, stroag stroage.Storage) (*Server, error) {
 	s := new(Server)
 
 	s.config = c
+	s.storage = stroag
 	s.srv = ssh.Server{
 		Addr:   c.Address,
 		Banner: "---------------- DepGit ----------------\n",
@@ -47,8 +42,6 @@ func Init(c Config) (*Server, error) {
 
 	s.srv.PublicKeyHandler = keyAuthOption
 	s.srv.Handle(handle)
-
-	//s.stroage = stroage
 
 	return s, nil
 }

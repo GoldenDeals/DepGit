@@ -23,7 +23,7 @@ func New(name string, logLevel ...logrus.Level) *logrus.Logger {
 	if len(logLevel) > 0 {
 		log.SetLevel(logLevel[0])
 	} else {
-		log.SetLevel(logrus.DebugLevel)
+		log.SetLevel(logrus.TraceLevel)
 	}
 
 	return log

@@ -1,0 +1,56 @@
+# Binaries and build artifacts
+/build/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go specific
+/vendor/
+/go.work
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Air live reload
+/tmp/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Log files
+*.log
+/logs/
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Dependency directories (uncomment if needed)
+# /node_modules/
+
+# Build output
+/dist/
+
+# Generated files
+/gen/
+
+/storage/
+
+# Test coverage
+/coverage/
+coverage.txt
+coverage.html 
