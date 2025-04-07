@@ -1,11 +1,10 @@
 package main
 
 import (
-	"context"
-	"os"
+	"fmt"
 
-	"github.com/GoldenDeals/DepGit/internal/git"
 	"github.com/GoldenDeals/DepGit/internal/share/logger"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 )
 
@@ -17,10 +16,16 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	s, err := git.Init(git.Config{os.Getenv("DEPGIT_SSH_GIT_ADDRESS")})
-	if err != nil {
-		log.Fatalln(err)
-	}
+	err = fmt.Errorf("some error")
+	log.
+		WithField("user_id", uuid.New().String()).
+		WithError(err).
+		Error("error creating user")
 
-	log.Fatalln(s.Serve(context.Background()))
+	// s, err := git.Init(git.Config{os.Getenv("DEPGIT_SSH_GIT_ADDRESS")})
+	// if err != nil {
+	// 	log.Fatalln(err)
+	// }
+
+	// log.Fatalln(s.Serve(context.Background()))
 }

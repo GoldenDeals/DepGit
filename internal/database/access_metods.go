@@ -5,17 +5,19 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/GoldenDeals/DepGit/internal/share/errors"
+	"github.com/GoldenDeals/DepGit/internal/share/logger"
 	"github.com/gobwas/glob"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
 
 const (
-	SSH_KEY_TYPE_RSA    SSH_KEY_TYPE = iota + 1
-	RSA_SHA2_256        SSH_KEY_TYPE
-	RSA_SHA2_512        SSH_KEY_TYPE
-	SSH_RSA             SSH_KEY_TYPE
-	ECDSA_SHA2_NISTP256 SSH_KEY_TYPE
+	SSH_KEY_TYPE_RSA SSH_KEY_TYPE = iota + 1
+	RSA_SHA2_256
+	RSA_SHA2_512
+	SSH_RSA
+	ECDSA_SHA2_NISTP256
 	// .... TODO: Добавить еще
 )
 
@@ -80,42 +82,63 @@ type DB struct {
 	db *sql.DB
 }
 
-func (d *DB) Init() error {
+func (d *DB) Close() error {
+	return d.db.Close()
+}
+
+func (d *DB) Init(dbname string) error {
 	var err error
-	d.db, err = sql.Open("sqlite3", "./migrations/access.db")
+	d.db, err = sql.Open("sqlite3", dbname)
 	if err != nil {
-		log.Errorf("Error init Database sql open ", err)
 		return err
 	}
 	err = d.db.Ping()
 	if err != nil {
-		log.Errorf("Error init Database ping ", err)
 		return err
 	}
-	logrus.Debug("Database access.db open")
+	log.Debugf("Database %s open", dbname)
 	return nil
 }
 
-func (u *User) Create(name, email string) {
-	u.ID = uuid.New()
-	u.Name = name
-	u.Email = email
-	u.Created = time.Now()
+func NewUser(name, email string) User {
+	return User{
+		ID:      uuid.New(),
+		Name:    name,
+		Email:   email,
+		Created: time.Now(),
+	}
 }
 
 func (d *DB) CreateUser(ctx context.Context, user *User) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+
+	// TODO: More validations
+	if user == nil || user.ID == uuid.Nil {
+		return errors.ERR_BAD_DATA
+	}
+
+	// TODO: Error check or recovery
+	userid := user.ID.String()
 	statement, err := d.db.Prepare("INSERT INTO users (id, name, email, created, edited, deleted) VALUES (?,?,?,?,?)")
 	if err != nil {
-		log.Errorf("Error Create User ", user.ID, err)
+		log.
+			WithContext(ctx).
+			WithField("user_id", userid).
+			WithError(err).
+			Warn("error creating user")
+
 		return err
 	}
-	userid := uuid.New().String()
 	_, err = statement.Exec(userid, user.Name, time.Now().Format(time.DateTime), user.Edited.Format(time.DateTime), user.Deleted.Format(time.DateTime))
 	if err != nil {
-		log.Errorf("Error Execute sql request ", err)
+		log.
+			WithContext(ctx).
+			WithField("user_id", userid).
+			WithError(err).
+			Warn("error creating user")
+
 		return err
 	}
 	logrus.Trace("Create User", userid, user.Name)
