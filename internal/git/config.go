@@ -1,6 +1,11 @@
 package git
 
+import "github.com/gliderlabs/ssh"
+
 type Config struct {
-	Port int
-	Host string
+	Address string
+}
+
+func keyAuthOption(ctx ssh.Context, key ssh.PublicKey) bool {
+	return true
 }

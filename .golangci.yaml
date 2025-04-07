@@ -1,0 +1,27 @@
+run:
+  timeout: 3m
+  tests: false    # Disable linting test files
+  skip-dirs:      # Exclude common directories
+    - vendor
+    - .git
+
+linters:
+  enable:
+    - govet      # Official Go analyzer (correctness)
+    - errcheck   # Ensure error handling
+    - staticcheck# Advanced static analysis
+    - gosec      # Security checks
+    - unused     # Find unused code
+    - ineffassign# Detect useless assignments
+    - gofmt      # Formatting checks
+    - typecheck  # Type verification
+
+linters-settings:
+  gosec:
+    excludes:     # Disable some security checks prone to false positives
+      - G107     # URL string concatenation check
+      - G304     # Potential file inclusion via variable
+
+issues:
+  exclude-use-default: false  # Don't use default excludes
+  max-same-issues: 10         # Limit duplicate issues
