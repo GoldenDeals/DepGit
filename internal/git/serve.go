@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 
+	"github.com/GoldenDeals/DepGit/internal/share/errors"
 	"github.com/GoldenDeals/DepGit/internal/share/logger"
 	"github.com/GoldenDeals/DepGit/internal/stroage"
 	"github.com/gliderlabs/ssh"
@@ -19,6 +20,15 @@ type Server struct {
 }
 
 func Init(c Config, stroag stroage.Storage) (*Server, error) {
+	if c.Address == "" {
+		log.Error("Address is empty")
+		return nil, errors.ERR_BAD_DATA
+	}
+
+	if stroag == nil {
+		log.Error("Stroage is nil")
+		return nil, errors.ERR_BAD_DATA
+	}
 	s := new(Server)
 
 	s.config = c
@@ -41,7 +51,7 @@ func Init(c Config, stroag stroage.Storage) (*Server, error) {
 	s.srv.AddHostKey(sig)
 
 	s.srv.PublicKeyHandler = keyAuthOption
-	s.srv.Handle(handle)
+	s.srv.Handle(s.handle)
 
 	return s, nil
 }

@@ -1,6 +1,7 @@
 package stroage
 
 import (
+	"context"
 	"io"
 	"os"
 	"path/filepath"
@@ -25,7 +26,7 @@ func NewFileStorage(basePath string) (*FileStorage, error) {
 }
 
 // Put stores an object in the filesystem
-func (s *FileStorage) Put(namespace string, objname string, obj io.Reader) error {
+func (s *FileStorage) Put(ctx context.Context, namespace string, objname string, obj io.Reader) error {
 	// Create directory for namespace if it doesn't exist
 	dir := filepath.Join(s.basePath, namespace)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -57,13 +58,13 @@ func (s *FileStorage) Put(namespace string, objname string, obj io.Reader) error
 }
 
 // Get retrieves an object from the filesystem
-func (s *FileStorage) Get(namespace string, objname string) (io.Reader, error) {
+func (s *FileStorage) Get(ctx context.Context, namespace string, objname string) (io.Reader, error) {
 	filePath := filepath.Join(s.basePath, namespace, objname)
 	return os.Open(filePath)
 }
 
 // List returns all objects in a namespace from the filesystem
-func (s *FileStorage) List(namespace string) ([]string, error) {
+func (s *FileStorage) List(ctx context.Context, namespace string) ([]string, error) {
 	var objects []string
 	dir := filepath.Join(s.basePath, namespace)
 

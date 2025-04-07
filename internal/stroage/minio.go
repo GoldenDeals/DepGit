@@ -48,30 +48,30 @@ func NewMinioStorage(endpoint, accessKeyID, secretAccessKey, bucketName string, 
 }
 
 // Put stores an object in Minio
-func (s *MinioStorage) Put(namespace string, objname string, obj io.Reader) error {
+func (s *MinioStorage) Put(ctx context.Context, namespace string, objname string, obj io.Reader) error {
 	// Combine namespace and objname to create the object key
 	objectKey := namespace + "/" + objname
 
 	// Check if object already exists
-	_, err := s.client.StatObject(context.Background(), s.bucketName, objectKey, minio.StatObjectOptions{})
+	_, err := s.client.StatObject(ctx, s.bucketName, objectKey, minio.StatObjectOptions{})
 	// WARN: Ignoring error
 	if err == nil {
 		return os.ErrExist
 	}
 
 	// Upload the object
-	_, err = s.client.PutObject(context.Background(), s.bucketName, objectKey, obj, -1,
+	_, err = s.client.PutObject(ctx, s.bucketName, objectKey, obj, -1,
 		minio.PutObjectOptions{})
 	return err
 }
 
 // Get retrieves an object from Minio
-func (s *MinioStorage) Get(namespace string, objname string) (io.Reader, error) {
+func (s *MinioStorage) Get(ctx context.Context, namespace string, objname string) (io.Reader, error) {
 	// Combine namespace and objname to create the object key
 	objectKey := namespace + "/" + objname
 
 	// Get object
-	obj, err := s.client.GetObject(context.Background(), s.bucketName, objectKey, minio.GetObjectOptions{})
+	obj, err := s.client.GetObject(ctx, s.bucketName, objectKey, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -81,11 +81,11 @@ func (s *MinioStorage) Get(namespace string, objname string) (io.Reader, error) 
 }
 
 // List returns all objects in a namespace from Minio
-func (s *MinioStorage) List(namespace string) ([]string, error) {
+func (s *MinioStorage) List(ctx context.Context, namespace string) ([]string, error) {
 	var objects []string
 
 	// List all objects with the prefix of the namespace
-	objectCh := s.client.ListObjects(context.Background(), s.bucketName,
+	objectCh := s.client.ListObjects(ctx, s.bucketName,
 		minio.ListObjectsOptions{
 			Prefix:    namespace + "/",
 			Recursive: true,

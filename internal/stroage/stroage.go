@@ -1,9 +1,12 @@
 package stroage
 
-import "io"
+import (
+	"context"
+	"io"
+)
 
 type Storage interface {
-	Put(namespace string, objname string, obj io.Reader) error
-	Get(namespace string, objname string) (io.Reader, error)
-	List(namespace string) ([]string, error)
+	Put(ctx context.Context, namespace string, objname string, obj io.Reader) error
+	Get(ctx context.Context, namespace string, objname string) (io.Reader, error)
+	List(ctx context.Context, namespace string) ([]string, error)
 }

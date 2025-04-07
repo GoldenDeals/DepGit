@@ -1,4 +1,4 @@
-.PHONY: clear live lint db-migrate build build-debug build-release test test-verbose test-coverage test-html
+.PHONY: clear live lint db-migrate build build-debug build-release test test-verbose test-coverage test-html test-git
 
 # Build variables
 VERSION ?= $(shell git describe --tags --always --dirty || echo "unknown")
@@ -60,3 +60,7 @@ test-html: test-coverage
 	@echo "Generating HTML coverage report..."
 	@go tool cover -html=$(COVERAGE_FILE) -o $(COVERAGE_HTML)
 	@echo "Coverage report generated at $(COVERAGE_HTML)"
+
+test-git:
+	@echo "Running git test script..."
+	@scripts/test-git.sh

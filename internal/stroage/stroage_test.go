@@ -75,15 +75,16 @@ func runCommonStorageTests(t *testing.T, storage Storage) {
 	objName := "common-test-file.txt"
 	content := "common test content"
 	reader := strings.NewReader(content)
+	ctx := context.Background()
 
 	// Test put
-	err := storage.Put(namespace, objName, reader)
+	err := storage.Put(ctx, namespace, objName, reader)
 	if err != nil {
 		t.Fatalf("Put failed: %v", err)
 	}
 
 	// Test get
-	result, err := storage.Get(namespace, objName)
+	result, err := storage.Get(ctx, namespace, objName)
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
 	}
@@ -99,7 +100,7 @@ func runCommonStorageTests(t *testing.T, storage Storage) {
 	}
 
 	// Test list
-	files, err := storage.List(namespace)
+	files, err := storage.List(ctx, namespace)
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -118,7 +119,7 @@ func runCommonStorageTests(t *testing.T, storage Storage) {
 
 	// Test putting an existing file
 	reader = strings.NewReader("new content")
-	err = storage.Put(namespace, objName, reader)
+	err = storage.Put(ctx, namespace, objName, reader)
 	if err != os.ErrExist {
 		t.Errorf("Expected os.ErrExist when putting existing file, got %v", err)
 	}
