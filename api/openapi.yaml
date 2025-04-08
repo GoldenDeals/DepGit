@@ -1,0 +1,338 @@
+openapi: 3.0.3
+info:
+  title: DepGit API
+  description: API for managing users, repositories, SSH keys, and access roles
+  version: 1.0.0
+
+servers:
+  - url: /api/v1
+
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        # Additional user properties would go here
+    
+    SshKey:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        key:
+          type: string
+        # Additional SSH key properties would go here
+
+    Repo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        # Additional repository properties would go here
+
+    AccessRole:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        repoId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [read, write, admin]
+        # Additional access role properties would go here
+
+    Error:
+      type: object
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+
+paths:
+  /users:
+    post:
+      summary: Create a new user
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        '201':
+          description: User created successfully
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    
+    get:
+      summary: Get all users
+      operationId: getUsers
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+
+  /users/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    
+    get:
+      summary: Get user by ID
+      operationId: getUser
+      responses:
+        '200':
+          description: User found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          description: User not found
+    
+    put:
+      summary: Update user
+      operationId: editUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        '200':
+          description: User updated successfully
+        '404':
+          description: User not found
+    
+    delete:
+      summary: Delete user
+      operationId: deleteUser
+      responses:
+        '204':
+          description: User deleted successfully
+        '404':
+          description: User not found
+
+  /users/{userId}/ssh-keys:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    
+    post:
+      summary: Add SSH key for user
+      operationId: addSshKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SshKey'
+      responses:
+        '201':
+          description: SSH key added successfully
+        '404':
+          description: User not found
+    
+    get:
+      summary: Get user's SSH keys
+      operationId: getSshKeys
+      responses:
+        '200':
+          description: List of SSH keys
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SshKey'
+        '404':
+          description: User not found
+
+  /ssh-keys/{keyId}:
+    parameters:
+      - name: keyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    
+    delete:
+      summary: Delete SSH key
+      operationId: delSshKey
+      responses:
+        '204':
+          description: SSH key deleted successfully
+        '404':
+          description: SSH key not found
+
+  /repos:
+    post:
+      summary: Create a new repository
+      operationId: createRepo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Repo'
+      responses:
+        '201':
+          description: Repository created successfully
+        '400':
+          description: Invalid input
+
+  /repos/{repoId}:
+    parameters:
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    
+    get:
+      summary: Get repository by ID
+      operationId: getRepo
+      responses:
+        '200':
+          description: Repository found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Repo'
+        '404':
+          description: Repository not found
+    
+    put:
+      summary: Update repository
+      operationId: updateRepo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Repo'
+      responses:
+        '200':
+          description: Repository updated successfully
+        '404':
+          description: Repository not found
+    
+    delete:
+      summary: Delete repository
+      operationId: deleteRepo
+      responses:
+        '204':
+          description: Repository deleted successfully
+        '404':
+          description: Repository not found
+
+  /repos/{repoId}/access-roles:
+    parameters:
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    
+    post:
+      summary: Create access role for repository
+      operationId: createAccessRole
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessRole'
+      responses:
+        '201':
+          description: Access role created successfully
+        '404':
+          description: Repository not found
+    
+    get:
+      summary: Get repository access roles
+      operationId: getAccessRoles
+      responses:
+        '200':
+          description: List of access roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AccessRole'
+        '404':
+          description: Repository not found
+
+  /access-roles/{roleId}:
+    parameters:
+      - name: roleId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    
+    put:
+      summary: Update access role
+      operationId: editAccessRole
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessRole'
+      responses:
+        '200':
+          description: Access role updated successfully
+        '404':
+          description: Access role not found
+    
+    delete:
+      summary: Delete access role
+      operationId: deleteAccessRole
+      responses:
+        '204':
+          description: Access role deleted successfully
+        '404':
+          description: Access role not found 
