@@ -1,4 +1,4 @@
-.PHONY: clear live lint db-migrate build build-debug build-release test test-verbose test-coverage test-html test-git gen-api
+.PHONY: clear live lint db-migrate build build-debug build-release test test-verbose test-coverage test-html test-git gen-api web-install web-dev web-build
 
 # Build variables
 VERSION ?= $(shell git describe --tags --always --dirty || echo "unknown")
@@ -29,7 +29,7 @@ build-release:
 	@$(GO_BUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BIN_NAME) $(SRC_DIR)
 	@echo "Release build complete: $(BUILD_DIR)/$(BIN_NAME)"
 
-clear: 
+clear:
 	@rm -fr ./build
 
 live:
@@ -69,3 +69,19 @@ gen-api:
 	@echo "Generating API code from OpenAPI spec..."
 	@mkdir -p internal/gen/api
 	@$(HOME)/go/bin/oapi-codegen -package api -generate types,server,spec api/openapi.yaml > internal/gen/api/api.go
+
+web-install:
+	@echo "Installing web dependencies..."
+	cd web && npm install --legacy-peer-deps
+
+web-dev:
+	@echo "Starting web development server..."
+	cd web && npm run dev
+
+web-build:
+	@echo "Building web application..."
+	cd web && npm run build
+
+# Full build including web application
+build-full: build-release web-build
+	@echo "Full build complete"

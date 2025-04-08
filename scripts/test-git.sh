@@ -92,7 +92,7 @@ echo -e "\nRepository created with 5 commits."
 if [ "$PUSH_TO_SERVER" = "yes" ] || [ "$PUSH_TO_SERVER" = "y" ]; then
     echo -e "\nPushing to DepGit server at $APP_ADDRESS..."
     # Use -u to set upstream and 'master' is the branch name
-    GIT_SSH_COMMAND="ssh -v" git push -u origin master
+    GIT_SSH_COMMAND="ssh" git push -u origin main
     echo -e "\nPush completed."
 else
     echo -e "\nTo push to the DepGit server, run:"

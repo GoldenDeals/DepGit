@@ -28,8 +28,7 @@ linters:
     - contextcheck # Check whether functions use a non-inherited context
     - misspell     # Finds commonly misspelled English words
     - whitespace   # Tool for detecting trailing whitespace
-    - wsl          # Add or remove empty lines
-    
+        
     # Security
     - gosec        # Security checks
     

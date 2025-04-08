@@ -82,7 +82,7 @@ func (s *MinioStorage) Get(ctx context.Context, namespace string, objname string
 
 // List returns all objects in a namespace from Minio
 func (s *MinioStorage) List(ctx context.Context, namespace string) ([]string, error) {
-	var objects []string
+	objects := make([]string, 0, 10) // Preallocate with reasonable initial capacity
 
 	// List all objects with the prefix of the namespace
 	objectCh := s.client.ListObjects(ctx, s.bucketName,

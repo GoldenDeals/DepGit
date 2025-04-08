@@ -3,6 +3,7 @@ package stroage
 import (
 	"context"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,7 +17,7 @@ type FileStorage struct {
 // NewFileStorage creates a new file storage client
 func NewFileStorage(basePath string) (*FileStorage, error) {
 	// Create base directory if it doesn't exist
-	if err := os.MkdirAll(basePath, 0755); err != nil {
+	if err := os.MkdirAll(basePath, 0750); err != nil {
 		return nil, err
 	}
 
@@ -26,10 +27,10 @@ func NewFileStorage(basePath string) (*FileStorage, error) {
 }
 
 // Put stores an object in the filesystem
-func (s *FileStorage) Put(ctx context.Context, namespace string, objname string, obj io.Reader) error {
+func (s *FileStorage) Put(_ context.Context, namespace string, objname string, obj io.Reader) error {
 	// Create directory for namespace if it doesn't exist
 	dir := filepath.Join(s.basePath, namespace)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return err
 	}
 
@@ -41,7 +42,7 @@ func (s *FileStorage) Put(ctx context.Context, namespace string, objname string,
 
 	// Create parent directories for the file if needed
 	fileDir := filepath.Dir(filePath)
-	if err := os.MkdirAll(fileDir, 0755); err != nil {
+	if err := os.MkdirAll(fileDir, 0750); err != nil {
 		return err
 	}
 
@@ -50,7 +51,14 @@ func (s *FileStorage) Put(ctx context.Context, namespace string, objname string,
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			log.Printf("Error closing file: %v", closeErr)
+			if err == nil {
+				err = closeErr
+			}
+		}
+	}()
 
 	// Copy data to file
 	_, err = io.Copy(file, obj)
@@ -58,13 +66,13 @@ func (s *FileStorage) Put(ctx context.Context, namespace string, objname string,
 }
 
 // Get retrieves an object from the filesystem
-func (s *FileStorage) Get(ctx context.Context, namespace string, objname string) (io.Reader, error) {
+func (s *FileStorage) Get(_ context.Context, namespace string, objname string) (io.Reader, error) {
 	filePath := filepath.Join(s.basePath, namespace, objname)
 	return os.Open(filePath)
 }
 
 // List returns all objects in a namespace from the filesystem
-func (s *FileStorage) List(ctx context.Context, namespace string) ([]string, error) {
+func (s *FileStorage) List(_ context.Context, namespace string) ([]string, error) {
 	var objects []string
 	dir := filepath.Join(s.basePath, namespace)
 

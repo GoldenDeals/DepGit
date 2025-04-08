@@ -7,45 +7,175 @@ info:
 servers:
   - url: /api/v1
 
+# Define security for all endpoints by default
+security:
+  - bearerAuth: []
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT Authentication. The token is obtained from the /auth/login endpoint.
+        Format: Bearer {token}
+
+        The JWT token contains the following claims:
+          - sub: User ID
+          - username: Username
+          - role: User role (Administrator, Developer, Viewer)
+          - exp: Expiration time
+          - iat: Issued at time
+
   schemas:
     User:
       type: object
+      required:
+        - username
+        - email
       properties:
         id:
           type: string
           format: uuid
-        # Additional user properties would go here
-    
+          readOnly: true
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+          example: "johndoe"
+        email:
+          type: string
+          format: email
+          example: "john.doe@example.com"
+        role:
+          type: string
+          enum: [Administrator, Developer, Viewer]
+          default: Developer
+          description: User's system-wide role
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    UserCredentials:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+        rememberMe:
+          type: boolean
+          default: false
+
+    AuthResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          description: JWT access token for API authentication
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refreshToken:
+          type: string
+          description: Token used to obtain a new access token when it expires
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        tokenType:
+          type: string
+          description: Type of token
+          enum: [bearer]
+          default: bearer
+        expiresIn:
+          type: integer
+          description: Token expiration time in seconds
+          example: 3600
+        user:
+          $ref: '#/components/schemas/User'
+          description: User information
+
     SshKey:
       type: object
+      required:
+        - userId
+        - name
+        - key
       properties:
         id:
           type: string
           format: uuid
+          readOnly: true
         userId:
-          type: string
-          format: uuid
-        key:
-          type: string
-        # Additional SSH key properties would go here
-
-    Repo:
-      type: object
-      properties:
-        id:
           type: string
           format: uuid
         name:
           type: string
-        # Additional repository properties would go here
+          description: A descriptive name for the SSH key
+          example: "MacBook Pro"
+        key:
+          type: string
+          description: The SSH public key content
+          example: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
+        type:
+          type: integer
+          description: SSH key type identifier
+          enum: [1, 2, 3, 4, 5]
+          default: 1
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
 
-    AccessRole:
+    Repo:
       type: object
+      required:
+        - name
       properties:
         id:
           type: string
           format: uuid
+          readOnly: true
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: "^[a-zA-Z0-9_-]+$"
+          example: "project-alpha"
+        description:
+          type: string
+          maxLength: 500
+          example: "Main project repository"
+        owner:
+          type: string
+          description: Username of the repository owner
+          example: "admin"
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    AccessRole:
+      type: object
+      required:
+        - userId
+        - repoId
+        - role
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
         userId:
           type: string
           format: uuid
@@ -55,7 +185,16 @@ components:
         role:
           type: string
           enum: [read, write, admin]
-        # Additional access role properties would go here
+          description: Access level for the repository
+        branch:
+          type: string
+          description: Branch pattern (supports glob syntax)
+          default: "*"
+          example: "main"
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
 
     Error:
       type: object
@@ -67,10 +206,232 @@ components:
           type: string
 
 paths:
+  /auth/login:
+    post:
+      summary: Authenticate user and get JWT tokens
+      operationId: login
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCredentials'
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/refresh-token:
+    post:
+      summary: Refresh access token
+      operationId: refreshToken
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refreshToken
+              properties:
+                refreshToken:
+                  type: string
+                  description: Refresh token obtained from login or previous refresh
+      responses:
+        '200':
+          description: Token refresh successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                    description: New JWT access token
+                  tokenType:
+                    type: string
+                    enum: [bearer]
+                    default: bearer
+                  expiresIn:
+                    type: integer
+                    description: Token expiration time in seconds
+                    example: 3600
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/register:
+    post:
+      summary: Register a new user
+      operationId: register
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - email
+                - password
+              properties:
+                username:
+                  type: string
+                  minLength: 3
+                  maxLength: 50
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/validate:
+    get:
+      summary: Validate JWT token and get user information
+      operationId: validateToken
+      tags:
+        - Authentication
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Token is valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                    example: true
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Token is invalid or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/logout:
+    post:
+      summary: Logout user and invalidate tokens
+      operationId: logout
+      tags:
+        - Authentication
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logout successful
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/forgot-password:
+    post:
+      summary: Request password reset
+      operationId: forgotPassword
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Password reset email sent
+        '404':
+          description: Email not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/reset-password:
+    post:
+      summary: Reset password with token
+      operationId: resetPassword
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+                - password
+              properties:
+                token:
+                  type: string
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+      responses:
+        '200':
+          description: Password reset successful
+        '400':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /users:
     post:
       summary: Create a new user
       operationId: createUser
+      tags:
+        - Users
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -80,16 +441,44 @@ paths:
       responses:
         '201':
           description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
         '400':
           description: Invalid input
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-    
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - requires Administrator role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
     get:
       summary: Get all users
       operationId: getUsers
+      tags:
+        - Users
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: role
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [Administrator, Developer, Viewer]
+          description: Filter users by role
       responses:
         '200':
           description: List of users
@@ -99,6 +488,12 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /users/{userId}:
     parameters:
@@ -108,10 +503,14 @@ paths:
         schema:
           type: string
           format: uuid
-    
+
     get:
       summary: Get user by ID
       operationId: getUser
+      tags:
+        - Users
+      security:
+        - bearerAuth: []
       responses:
         '200':
           description: User found
@@ -119,12 +518,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: User not found
-    
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
     put:
       summary: Update user
-      operationId: editUser
+      operationId: updateUser
+      tags:
+        - Users
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -134,17 +547,57 @@ paths:
       responses:
         '200':
           description: User updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - requires Administrator role or own account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: User not found
-    
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
     delete:
       summary: Delete user
       operationId: deleteUser
+      tags:
+        - Users
+      security:
+        - bearerAuth: []
       responses:
         '204':
           description: User deleted successfully
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - requires Administrator role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /users/{userId}/ssh-keys:
     parameters:
@@ -154,10 +607,14 @@ paths:
         schema:
           type: string
           format: uuid
-    
+
     post:
       summary: Add SSH key for user
       operationId: addSshKey
+      tags:
+        - SSH Keys
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -167,12 +624,42 @@ paths:
       responses:
         '201':
           description: SSH key added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SshKey'
+        '400':
+          description: Invalid SSH key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - requires Administrator role or own account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: User not found
-    
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
     get:
       summary: Get user's SSH keys
       operationId: getSshKeys
+      tags:
+        - SSH Keys
+      security:
+        - bearerAuth: []
       responses:
         '200':
           description: List of SSH keys
@@ -182,8 +669,24 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/SshKey'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - requires Administrator role or own account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /ssh-keys/{keyId}:
     parameters:
@@ -193,20 +696,44 @@ paths:
         schema:
           type: string
           format: uuid
-    
+
     delete:
       summary: Delete SSH key
-      operationId: delSshKey
+      operationId: deleteSshKey
+      tags:
+        - SSH Keys
+      security:
+        - bearerAuth: []
       responses:
         '204':
           description: SSH key deleted successfully
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - requires Administrator role or own SSH key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: SSH key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /repos:
     post:
       summary: Create a new repository
       operationId: createRepo
+      tags:
+        - Repositories
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -216,8 +743,51 @@ paths:
       responses:
         '201':
           description: Repository created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Repo'
         '400':
           description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - requires Administrator or Developer role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      summary: Get all repositories
+      operationId: getRepos
+      tags:
+        - Repositories
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of repositories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Repo'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /repos/{repoId}:
     parameters:
@@ -227,10 +797,14 @@ paths:
         schema:
           type: string
           format: uuid
-    
+
     get:
       summary: Get repository by ID
       operationId: getRepo
+      tags:
+        - Repositories
+      security:
+        - bearerAuth: []
       responses:
         '200':
           description: Repository found
@@ -238,12 +812,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Repo'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - requires access to repository
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Repository not found
-    
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
     put:
       summary: Update repository
       operationId: updateRepo
+      tags:
+        - Repositories
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -253,17 +847,57 @@ paths:
       responses:
         '200':
           description: Repository updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Repo'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - requires admin access to repository
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Repository not found
-    
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
     delete:
       summary: Delete repository
       operationId: deleteRepo
+      tags:
+        - Repositories
+      security:
+        - bearerAuth: []
       responses:
         '204':
           description: Repository deleted successfully
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - requires Administrator role or admin access to repository
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Repository not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /repos/{repoId}/access-roles:
     parameters:
@@ -273,10 +907,14 @@ paths:
         schema:
           type: string
           format: uuid
-    
+
     post:
       summary: Create access role for repository
       operationId: createAccessRole
+      tags:
+        - Access Roles
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -286,12 +924,42 @@ paths:
       responses:
         '201':
           description: Access role created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRole'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - requires admin access to repository
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Repository not found
-    
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
     get:
       summary: Get repository access roles
       operationId: getAccessRoles
+      tags:
+        - Access Roles
+      security:
+        - bearerAuth: []
       responses:
         '200':
           description: List of access roles
@@ -301,8 +969,24 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/AccessRole'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - requires admin access to repository
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Repository not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /access-roles/{roleId}:
     parameters:
@@ -312,10 +996,14 @@ paths:
         schema:
           type: string
           format: uuid
-    
+
     put:
       summary: Update access role
-      operationId: editAccessRole
+      operationId: updateAccessRole
+      tags:
+        - Access Roles
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -325,14 +1013,89 @@ paths:
       responses:
         '200':
           description: Access role updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRole'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - requires admin access to repository
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Access role not found
-    
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
     delete:
       summary: Delete access role
       operationId: deleteAccessRole
+      tags:
+        - Access Roles
+      security:
+        - bearerAuth: []
       responses:
         '204':
           description: Access role deleted successfully
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - requires admin access to repository
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
-          description: Access role not found 
+          description: Access role not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /git-info:
+    get:
+      summary: Get Git server information
+      operationId: getGitInfo
+      tags:
+        - System
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Git server information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sshUrl:
+                    type: string
+                    description: Base SSH URL for Git operations
+                    example: "ssh://git@example.com"
+                  httpUrl:
+                    type: string
+                    description: Base HTTP URL for Git operations
+                    example: "https://example.com/git"
+                  version:
+                    type: string
+                    description: Git server version
+                    example: "2.34.1"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'

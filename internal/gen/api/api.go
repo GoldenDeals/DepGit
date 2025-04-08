@@ -12,11 +12,16 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/labstack/echo/v4"
 	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
+)
+
+const (
+	BearerAuthScopes = "bearerAuth.Scopes"
 )
 
 // Defines values for AccessRoleRole.
@@ -26,16 +31,68 @@ const (
 	Write AccessRoleRole = "write"
 )
 
+// Defines values for AuthResponseTokenType.
+const (
+	Bearer AuthResponseTokenType = "bearer"
+)
+
+// Defines values for SshKeyType.
+const (
+	N1 SshKeyType = 1
+	N2 SshKeyType = 2
+	N3 SshKeyType = 3
+	N4 SshKeyType = 4
+	N5 SshKeyType = 5
+)
+
+// Defines values for UserRole.
+const (
+	UserRoleAdministrator UserRole = "Administrator"
+	UserRoleDeveloper     UserRole = "Developer"
+	UserRoleViewer        UserRole = "Viewer"
+)
+
+// Defines values for GetUsersParamsRole.
+const (
+	GetUsersParamsRoleAdministrator GetUsersParamsRole = "Administrator"
+	GetUsersParamsRoleDeveloper     GetUsersParamsRole = "Developer"
+	GetUsersParamsRoleViewer        GetUsersParamsRole = "Viewer"
+)
+
 // AccessRole defines model for AccessRole.
 type AccessRole struct {
-	Id     *openapi_types.UUID `json:"id,omitempty"`
-	RepoId *openapi_types.UUID `json:"repoId,omitempty"`
-	Role   *AccessRoleRole     `json:"role,omitempty"`
-	UserId *openapi_types.UUID `json:"userId,omitempty"`
+	// Branch Branch pattern (supports glob syntax)
+	Branch    *string             `json:"branch,omitempty"`
+	CreatedAt *time.Time          `json:"createdAt,omitempty"`
+	Id        *openapi_types.UUID `json:"id,omitempty"`
+	RepoId    openapi_types.UUID  `json:"repoId"`
+
+	// Role Access level for the repository
+	Role   AccessRoleRole     `json:"role"`
+	UserId openapi_types.UUID `json:"userId"`
 }
 
-// AccessRoleRole defines model for AccessRole.Role.
+// AccessRoleRole Access level for the repository
 type AccessRoleRole string
+
+// AuthResponse defines model for AuthResponse.
+type AuthResponse struct {
+	// AccessToken JWT access token for API authentication
+	AccessToken *string `json:"accessToken,omitempty"`
+
+	// ExpiresIn Token expiration time in seconds
+	ExpiresIn *int `json:"expiresIn,omitempty"`
+
+	// RefreshToken Token used to obtain a new access token when it expires
+	RefreshToken *string `json:"refreshToken,omitempty"`
+
+	// TokenType Type of token
+	TokenType *AuthResponseTokenType `json:"tokenType,omitempty"`
+	User      *User                  `json:"user,omitempty"`
+}
+
+// AuthResponseTokenType Type of token
+type AuthResponseTokenType string
 
 // Error defines model for Error.
 type Error struct {
@@ -45,24 +102,107 @@ type Error struct {
 
 // Repo defines model for Repo.
 type Repo struct {
-	Id   *openapi_types.UUID `json:"id,omitempty"`
-	Name *string             `json:"name,omitempty"`
+	CreatedAt   *time.Time          `json:"createdAt,omitempty"`
+	Description *string             `json:"description,omitempty"`
+	Id          *openapi_types.UUID `json:"id,omitempty"`
+	Name        string              `json:"name"`
+
+	// Owner Username of the repository owner
+	Owner     *string    `json:"owner,omitempty"`
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
 }
 
 // SshKey defines model for SshKey.
 type SshKey struct {
-	Id     *openapi_types.UUID `json:"id,omitempty"`
-	Key    *string             `json:"key,omitempty"`
-	UserId *openapi_types.UUID `json:"userId,omitempty"`
+	CreatedAt *time.Time          `json:"createdAt,omitempty"`
+	Id        *openapi_types.UUID `json:"id,omitempty"`
+
+	// Key The SSH public key content
+	Key string `json:"key"`
+
+	// Name A descriptive name for the SSH key
+	Name string `json:"name"`
+
+	// Type SSH key type identifier
+	Type   *SshKeyType        `json:"type,omitempty"`
+	UserId openapi_types.UUID `json:"userId"`
 }
+
+// SshKeyType SSH key type identifier
+type SshKeyType int
 
 // User defines model for User.
 type User struct {
-	Id *openapi_types.UUID `json:"id,omitempty"`
+	CreatedAt *time.Time          `json:"createdAt,omitempty"`
+	Email     openapi_types.Email `json:"email"`
+	Id        *openapi_types.UUID `json:"id,omitempty"`
+
+	// Role User's system-wide role
+	Role      *UserRole  `json:"role,omitempty"`
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
+	Username  string     `json:"username"`
 }
 
-// EditAccessRoleJSONRequestBody defines body for EditAccessRole for application/json ContentType.
-type EditAccessRoleJSONRequestBody = AccessRole
+// UserRole User's system-wide role
+type UserRole string
+
+// UserCredentials defines model for UserCredentials.
+type UserCredentials struct {
+	Password   string `json:"password"`
+	RememberMe *bool  `json:"rememberMe,omitempty"`
+	Username   string `json:"username"`
+}
+
+// ForgotPasswordJSONBody defines parameters for ForgotPassword.
+type ForgotPasswordJSONBody struct {
+	Email openapi_types.Email `json:"email"`
+}
+
+// RefreshTokenJSONBody defines parameters for RefreshToken.
+type RefreshTokenJSONBody struct {
+	// RefreshToken Refresh token obtained from login or previous refresh
+	RefreshToken string `json:"refreshToken"`
+}
+
+// RegisterJSONBody defines parameters for Register.
+type RegisterJSONBody struct {
+	Email    openapi_types.Email `json:"email"`
+	Password string              `json:"password"`
+	Username string              `json:"username"`
+}
+
+// ResetPasswordJSONBody defines parameters for ResetPassword.
+type ResetPasswordJSONBody struct {
+	Password string `json:"password"`
+	Token    string `json:"token"`
+}
+
+// GetUsersParams defines parameters for GetUsers.
+type GetUsersParams struct {
+	// Role Filter users by role
+	Role *GetUsersParamsRole `form:"role,omitempty" json:"role,omitempty"`
+}
+
+// GetUsersParamsRole defines parameters for GetUsers.
+type GetUsersParamsRole string
+
+// UpdateAccessRoleJSONRequestBody defines body for UpdateAccessRole for application/json ContentType.
+type UpdateAccessRoleJSONRequestBody = AccessRole
+
+// ForgotPasswordJSONRequestBody defines body for ForgotPassword for application/json ContentType.
+type ForgotPasswordJSONRequestBody ForgotPasswordJSONBody
+
+// LoginJSONRequestBody defines body for Login for application/json ContentType.
+type LoginJSONRequestBody = UserCredentials
+
+// RefreshTokenJSONRequestBody defines body for RefreshToken for application/json ContentType.
+type RefreshTokenJSONRequestBody RefreshTokenJSONBody
+
+// RegisterJSONRequestBody defines body for Register for application/json ContentType.
+type RegisterJSONRequestBody RegisterJSONBody
+
+// ResetPasswordJSONRequestBody defines body for ResetPassword for application/json ContentType.
+type ResetPasswordJSONRequestBody ResetPasswordJSONBody
 
 // CreateRepoJSONRequestBody defines body for CreateRepo for application/json ContentType.
 type CreateRepoJSONRequestBody = Repo
@@ -76,8 +216,8 @@ type CreateAccessRoleJSONRequestBody = AccessRole
 // CreateUserJSONRequestBody defines body for CreateUser for application/json ContentType.
 type CreateUserJSONRequestBody = User
 
-// EditUserJSONRequestBody defines body for EditUser for application/json ContentType.
-type EditUserJSONRequestBody = User
+// UpdateUserJSONRequestBody defines body for UpdateUser for application/json ContentType.
+type UpdateUserJSONRequestBody = User
 
 // AddSshKeyJSONRequestBody defines body for AddSshKey for application/json ContentType.
 type AddSshKeyJSONRequestBody = SshKey
@@ -89,7 +229,34 @@ type ServerInterface interface {
 	DeleteAccessRole(ctx echo.Context, roleId openapi_types.UUID) error
 	// Update access role
 	// (PUT /access-roles/{roleId})
-	EditAccessRole(ctx echo.Context, roleId openapi_types.UUID) error
+	UpdateAccessRole(ctx echo.Context, roleId openapi_types.UUID) error
+	// Request password reset
+	// (POST /auth/forgot-password)
+	ForgotPassword(ctx echo.Context) error
+	// Authenticate user and get JWT tokens
+	// (POST /auth/login)
+	Login(ctx echo.Context) error
+	// Logout user and invalidate tokens
+	// (POST /auth/logout)
+	Logout(ctx echo.Context) error
+	// Refresh access token
+	// (POST /auth/refresh-token)
+	RefreshToken(ctx echo.Context) error
+	// Register a new user
+	// (POST /auth/register)
+	Register(ctx echo.Context) error
+	// Reset password with token
+	// (POST /auth/reset-password)
+	ResetPassword(ctx echo.Context) error
+	// Validate JWT token and get user information
+	// (GET /auth/validate)
+	ValidateToken(ctx echo.Context) error
+	// Get Git server information
+	// (GET /git-info)
+	GetGitInfo(ctx echo.Context) error
+	// Get all repositories
+	// (GET /repos)
+	GetRepos(ctx echo.Context) error
 	// Create a new repository
 	// (POST /repos)
 	CreateRepo(ctx echo.Context) error
@@ -110,10 +277,10 @@ type ServerInterface interface {
 	CreateAccessRole(ctx echo.Context, repoId openapi_types.UUID) error
 	// Delete SSH key
 	// (DELETE /ssh-keys/{keyId})
-	DelSshKey(ctx echo.Context, keyId openapi_types.UUID) error
+	DeleteSshKey(ctx echo.Context, keyId openapi_types.UUID) error
 	// Get all users
 	// (GET /users)
-	GetUsers(ctx echo.Context) error
+	GetUsers(ctx echo.Context, params GetUsersParams) error
 	// Create a new user
 	// (POST /users)
 	CreateUser(ctx echo.Context) error
@@ -125,7 +292,7 @@ type ServerInterface interface {
 	GetUser(ctx echo.Context, userId openapi_types.UUID) error
 	// Update user
 	// (PUT /users/{userId})
-	EditUser(ctx echo.Context, userId openapi_types.UUID) error
+	UpdateUser(ctx echo.Context, userId openapi_types.UUID) error
 	// Get user's SSH keys
 	// (GET /users/{userId}/ssh-keys)
 	GetSshKeys(ctx echo.Context, userId openapi_types.UUID) error
@@ -150,13 +317,15 @@ func (w *ServerInterfaceWrapper) DeleteAccessRole(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter roleId: %s", err))
 	}
 
+	ctx.Set(BearerAuthScopes, []string{})
+
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.DeleteAccessRole(ctx, roleId)
 	return err
 }
 
-// EditAccessRole converts echo context to params.
-func (w *ServerInterfaceWrapper) EditAccessRole(ctx echo.Context) error {
+// UpdateAccessRole converts echo context to params.
+func (w *ServerInterfaceWrapper) UpdateAccessRole(ctx echo.Context) error {
 	var err error
 	// ------------- Path parameter "roleId" -------------
 	var roleId openapi_types.UUID
@@ -166,14 +335,117 @@ func (w *ServerInterfaceWrapper) EditAccessRole(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter roleId: %s", err))
 	}
 
+	ctx.Set(BearerAuthScopes, []string{})
+
 	// Invoke the callback with all the unmarshaled arguments
-	err = w.Handler.EditAccessRole(ctx, roleId)
+	err = w.Handler.UpdateAccessRole(ctx, roleId)
+	return err
+}
+
+// ForgotPassword converts echo context to params.
+func (w *ServerInterfaceWrapper) ForgotPassword(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.ForgotPassword(ctx)
+	return err
+}
+
+// Login converts echo context to params.
+func (w *ServerInterfaceWrapper) Login(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.Login(ctx)
+	return err
+}
+
+// Logout converts echo context to params.
+func (w *ServerInterfaceWrapper) Logout(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.Logout(ctx)
+	return err
+}
+
+// RefreshToken converts echo context to params.
+func (w *ServerInterfaceWrapper) RefreshToken(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.RefreshToken(ctx)
+	return err
+}
+
+// Register converts echo context to params.
+func (w *ServerInterfaceWrapper) Register(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.Register(ctx)
+	return err
+}
+
+// ResetPassword converts echo context to params.
+func (w *ServerInterfaceWrapper) ResetPassword(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.ResetPassword(ctx)
+	return err
+}
+
+// ValidateToken converts echo context to params.
+func (w *ServerInterfaceWrapper) ValidateToken(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.ValidateToken(ctx)
+	return err
+}
+
+// GetGitInfo converts echo context to params.
+func (w *ServerInterfaceWrapper) GetGitInfo(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetGitInfo(ctx)
+	return err
+}
+
+// GetRepos converts echo context to params.
+func (w *ServerInterfaceWrapper) GetRepos(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetRepos(ctx)
 	return err
 }
 
 // CreateRepo converts echo context to params.
 func (w *ServerInterfaceWrapper) CreateRepo(ctx echo.Context) error {
 	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
 
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.CreateRepo(ctx)
@@ -191,6 +463,8 @@ func (w *ServerInterfaceWrapper) DeleteRepo(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter repoId: %s", err))
 	}
 
+	ctx.Set(BearerAuthScopes, []string{})
+
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.DeleteRepo(ctx, repoId)
 	return err
@@ -206,6 +480,8 @@ func (w *ServerInterfaceWrapper) GetRepo(ctx echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter repoId: %s", err))
 	}
+
+	ctx.Set(BearerAuthScopes, []string{})
 
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.GetRepo(ctx, repoId)
@@ -223,6 +499,8 @@ func (w *ServerInterfaceWrapper) UpdateRepo(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter repoId: %s", err))
 	}
 
+	ctx.Set(BearerAuthScopes, []string{})
+
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.UpdateRepo(ctx, repoId)
 	return err
@@ -238,6 +516,8 @@ func (w *ServerInterfaceWrapper) GetAccessRoles(ctx echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter repoId: %s", err))
 	}
+
+	ctx.Set(BearerAuthScopes, []string{})
 
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.GetAccessRoles(ctx, repoId)
@@ -255,13 +535,15 @@ func (w *ServerInterfaceWrapper) CreateAccessRole(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter repoId: %s", err))
 	}
 
+	ctx.Set(BearerAuthScopes, []string{})
+
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.CreateAccessRole(ctx, repoId)
 	return err
 }
 
-// DelSshKey converts echo context to params.
-func (w *ServerInterfaceWrapper) DelSshKey(ctx echo.Context) error {
+// DeleteSshKey converts echo context to params.
+func (w *ServerInterfaceWrapper) DeleteSshKey(ctx echo.Context) error {
 	var err error
 	// ------------- Path parameter "keyId" -------------
 	var keyId openapi_types.UUID
@@ -271,8 +553,10 @@ func (w *ServerInterfaceWrapper) DelSshKey(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter keyId: %s", err))
 	}
 
+	ctx.Set(BearerAuthScopes, []string{})
+
 	// Invoke the callback with all the unmarshaled arguments
-	err = w.Handler.DelSshKey(ctx, keyId)
+	err = w.Handler.DeleteSshKey(ctx, keyId)
 	return err
 }
 
@@ -280,14 +564,27 @@ func (w *ServerInterfaceWrapper) DelSshKey(ctx echo.Context) error {
 func (w *ServerInterfaceWrapper) GetUsers(ctx echo.Context) error {
 	var err error
 
+	ctx.Set(BearerAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetUsersParams
+	// ------------- Optional query parameter "role" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "role", ctx.QueryParams(), &params.Role)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter role: %s", err))
+	}
+
 	// Invoke the callback with all the unmarshaled arguments
-	err = w.Handler.GetUsers(ctx)
+	err = w.Handler.GetUsers(ctx, params)
 	return err
 }
 
 // CreateUser converts echo context to params.
 func (w *ServerInterfaceWrapper) CreateUser(ctx echo.Context) error {
 	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
 
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.CreateUser(ctx)
@@ -305,6 +602,8 @@ func (w *ServerInterfaceWrapper) DeleteUser(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter userId: %s", err))
 	}
 
+	ctx.Set(BearerAuthScopes, []string{})
+
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.DeleteUser(ctx, userId)
 	return err
@@ -321,13 +620,15 @@ func (w *ServerInterfaceWrapper) GetUser(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter userId: %s", err))
 	}
 
+	ctx.Set(BearerAuthScopes, []string{})
+
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.GetUser(ctx, userId)
 	return err
 }
 
-// EditUser converts echo context to params.
-func (w *ServerInterfaceWrapper) EditUser(ctx echo.Context) error {
+// UpdateUser converts echo context to params.
+func (w *ServerInterfaceWrapper) UpdateUser(ctx echo.Context) error {
 	var err error
 	// ------------- Path parameter "userId" -------------
 	var userId openapi_types.UUID
@@ -337,8 +638,10 @@ func (w *ServerInterfaceWrapper) EditUser(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter userId: %s", err))
 	}
 
+	ctx.Set(BearerAuthScopes, []string{})
+
 	// Invoke the callback with all the unmarshaled arguments
-	err = w.Handler.EditUser(ctx, userId)
+	err = w.Handler.UpdateUser(ctx, userId)
 	return err
 }
 
@@ -352,6 +655,8 @@ func (w *ServerInterfaceWrapper) GetSshKeys(ctx echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter userId: %s", err))
 	}
+
+	ctx.Set(BearerAuthScopes, []string{})
 
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.GetSshKeys(ctx, userId)
@@ -368,6 +673,8 @@ func (w *ServerInterfaceWrapper) AddSshKey(ctx echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter userId: %s", err))
 	}
+
+	ctx.Set(BearerAuthScopes, []string{})
 
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.AddSshKey(ctx, userId)
@@ -403,19 +710,28 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 	}
 
 	router.DELETE(baseURL+"/access-roles/:roleId", wrapper.DeleteAccessRole)
-	router.PUT(baseURL+"/access-roles/:roleId", wrapper.EditAccessRole)
+	router.PUT(baseURL+"/access-roles/:roleId", wrapper.UpdateAccessRole)
+	router.POST(baseURL+"/auth/forgot-password", wrapper.ForgotPassword)
+	router.POST(baseURL+"/auth/login", wrapper.Login)
+	router.POST(baseURL+"/auth/logout", wrapper.Logout)
+	router.POST(baseURL+"/auth/refresh-token", wrapper.RefreshToken)
+	router.POST(baseURL+"/auth/register", wrapper.Register)
+	router.POST(baseURL+"/auth/reset-password", wrapper.ResetPassword)
+	router.GET(baseURL+"/auth/validate", wrapper.ValidateToken)
+	router.GET(baseURL+"/git-info", wrapper.GetGitInfo)
+	router.GET(baseURL+"/repos", wrapper.GetRepos)
 	router.POST(baseURL+"/repos", wrapper.CreateRepo)
 	router.DELETE(baseURL+"/repos/:repoId", wrapper.DeleteRepo)
 	router.GET(baseURL+"/repos/:repoId", wrapper.GetRepo)
 	router.PUT(baseURL+"/repos/:repoId", wrapper.UpdateRepo)
 	router.GET(baseURL+"/repos/:repoId/access-roles", wrapper.GetAccessRoles)
 	router.POST(baseURL+"/repos/:repoId/access-roles", wrapper.CreateAccessRole)
-	router.DELETE(baseURL+"/ssh-keys/:keyId", wrapper.DelSshKey)
+	router.DELETE(baseURL+"/ssh-keys/:keyId", wrapper.DeleteSshKey)
 	router.GET(baseURL+"/users", wrapper.GetUsers)
 	router.POST(baseURL+"/users", wrapper.CreateUser)
 	router.DELETE(baseURL+"/users/:userId", wrapper.DeleteUser)
 	router.GET(baseURL+"/users/:userId", wrapper.GetUser)
-	router.PUT(baseURL+"/users/:userId", wrapper.EditUser)
+	router.PUT(baseURL+"/users/:userId", wrapper.UpdateUser)
 	router.GET(baseURL+"/users/:userId/ssh-keys", wrapper.GetSshKeys)
 	router.POST(baseURL+"/users/:userId/ssh-keys", wrapper.AddSshKey)
 
@@ -424,23 +740,51 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/8xYS2/bOBD+K8TsAntRI6fpSTfvpsgau4ciQU5FDqw4dthIJMtHAsHwfy9ISrYcy7Lk",
-	"2EEuecjkPL75vpmRl5DLUkmBwhrIlmDyRyxp+HOa52jMrSzQ/6e0VKgtx/AZZ/7nXOqSWsjAOc4gAVsp",
-	"hAyM1VwsYJWARiVnA4/WflC4ErLvoJH6cy+aW4QEKCu5gIeOi86gHuRjtX4if/zE3PrLX7WWeje9XDLc",
-	"ssiFvfq8McmFxQVqb6FEY+ginB7g7xaVPBpNQcuhfu7M439YHe3pKd49Ldb3BvWREe2a84+4mAcwGZpc",
-	"c2W5FJDB9NuMzKUmJRV0wcWC+KBNQjwXDbdSczQJubv7lzxhZRJCBSM0UJ14DhrvnVtPRrhGdcMtmX6b",
-	"QQLPqE30cHkxuZj4jKRCQRWHDK4uJhdXkICi9jGklUaTn4LJdOl/zdgqRlugDXX0MFAftYcUrsPzlui8",
-	"fIySwkSgPk++dCS7CZxEw4wYFx7OXVFUPsovhy4KaclcOsEC0MaVJdXVOqI2ON6copqWaFEbyL4vgXtr",
-	"Pm1oCAox2RD/L8c1MsisdpjUzWVIvR8SUM7ugvSVcfsKol8Ojf1bsioKV1gU4SJVquB5uJr+ND7pZSuA",
-	"PzXOIYM/0k37S+vel7YcBJ5tp7HaqcukH16nGD1pXe6Dwe26rBJIA8ODwqTpwO4fjdRi6EDnwS2YHoTY",
-	"5W7it408K5KHQLsA60B6Jp5pwRnhwhNmG6iYMaFE4MtG/1ULrXQZR9QAZa6BO6TJViajJNm6d0CR7VQS",
-	"WGBHsW/Qdgc8OUO59+ZR53B8wjdoW9mSHxWZXQ9sQnH1OEcTivr7EEKa9KI6qvMMqEbdePqVtDX5vJt9",
-	"/Ny0WfNWmnKLpRnT1tfFplrTqovF/3NjiZxvrwanY/Jrs+9G6J7R8OEG62X/fNw/J44rUTMuWi78Ivma",
-	"7sY8fvKrY7p8wurw6KhX8SGTo15Kx42N5tKBmVEfG8a1kNjbqOaRCpt3Xwu4DwfeQ/zh5WOE7GPouxKm",
-	"RdF81i+m4PA8Moq5HCkgf/nQhnWSKOOrdQfEgzc2F/NsiJQu4+vngF1tDf4hxQU0Rskt3DigNVeTrY/2",
-	"59zMNgTpiL1/J+tNzwvA5zZmD6u/MjjXy+CHkNlkD46j9q9e5OvNa58i1jOpr9nGQfQ+7bYeeiMabvOF",
-	"zNuY+ZfZMvRu9OwcBFPGWsP/9ARtQD5yEjSLA2XsJBydMtaAH/Ymt9aPQf3c1MDpAjJIqeLp8yWsHla/",
-	"AwAA//9wjFMjghYAAA==",
+	"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",
+	"BLiLWySirZsOnl3N/h8AAP//LAUpDl9QAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

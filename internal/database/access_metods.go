@@ -1,297 +1,393 @@
+// Package database provides database access methods and types for managing
+// users, repositories, SSH keys, and access roles in the DepGit system.
 package database
 
-// import (
-// 	"context"
-// 	"database/sql"
-// 	"time"
+import (
+	"context"
+	"database/sql"
+	"time"
 
-// 	"github.com/GoldenDeals/DepGit/internal/share/errors"
-// 	"github.com/GoldenDeals/DepGit/internal/share/logger"
-// 	"github.com/gobwas/glob"
-// 	"github.com/google/uuid"
-// 	"github.com/sirupsen/logrus"
-// )
+	errors "github.com/GoldenDeals/DepGit/internal/share/errors"
+	"github.com/GoldenDeals/DepGit/internal/share/logger"
+	"github.com/gobwas/glob"
+	"github.com/google/uuid"
+	_ "github.com/mattn/go-sqlite3"
+	"github.com/sirupsen/logrus"
+)
 
-// const (
-// 	SSH_KEY_TYPE_RSA SSH_KEY_TYPE = iota + 1
-// 	RSA_SHA2_256
-// 	RSA_SHA2_512
-// 	SSH_RSA
-// 	ECDSA_SHA2_NISTP256
-// 	// .... TODO: Добавить еще
-// )
+const (
+	SSH_KEY_TYPE_RSA SSH_KEY_TYPE = iota + 1
+	RSA_SHA2_256
+	RSA_SHA2_512
+	SSH_RSA
+	ECDSA_SHA2_NISTP256
+	// .... TODO: Add more
+)
 
-// var log = logger.New("db")
+var log = logger.New("db")
 
-// type (
-// 	IDT          = uuid.UUID
-// 	SSH_KEY_TYPE int
-// )
+type (
+	IDT          = uuid.UUID
+	SSH_KEY_TYPE int
+)
 
-// type User struct {
-// 	ID uuid.UUID
+type User struct {
+	ID uuid.UUID
 
-// 	Name  string
-// 	Email string
+	Name  string
+	Email string
 
-// 	Created time.Time
-// 	Edited  time.Time
-// 	Deleted time.Time
-// }
+	Created time.Time
+	Edited  time.Time
+	Deleted time.Time
+}
 
-// type SshKey struct {
-// 	ID     uuid.UUID
-// 	UserID uuid.UUID
+type SshKey struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
 
-// 	Name string
-// 	Type SSH_KEY_TYPE
-// 	Data []byte
+	Name string
+	Type SSH_KEY_TYPE
+	Data []byte
 
-// 	Created time.Time
-// 	Deleted time.Time
-// }
+	Created time.Time
+	Deleted time.Time
+}
 
-// type Repo struct {
-// 	ID uuid.UUID
+type Repo struct {
+	ID uuid.UUID
 
-// 	Name string
+	Name string
 
-// 	Created time.Time
-// 	Edited  time.Time
-// 	Deleted time.Time
-// }
+	Created time.Time
+	Edited  time.Time
+	Deleted time.Time
+}
 
-// type AccessRole struct {
-// 	// PRIMARY KEY ( UserID, RepoID )
-// 	RoleID uuid.UUID
-// 	UserID uuid.UUID
-// 	RepoID uuid.UUID
+type AccessRole struct {
+	// PRIMARY KEY ( UserID, RepoID )
+	RoleID uuid.UUID
+	UserID uuid.UUID
+	RepoID uuid.UUID
 
-// 	Branches *glob.Glob
+	Branches *glob.Glob
 
-// 	Created time.Time
-// 	Deleted time.Time
-// }
+	Created time.Time
+	Deleted time.Time
+}
 
-// type Classes interface {
-// 	New()
-// 	Create()
-// }
+type Classes interface {
+	New()
+	Create()
+}
 
-// type DB struct {
-// 	db *sql.DB
-// }
+type DB struct {
+	db *sql.DB
+}
 
-// func (d *DB) Close() error {
-// 	return d.db.Close()
-// }
+// DB returns the underlying database connection
+func (d *DB) DB() *sql.DB {
+	return d.db
+}
 
-// func (d *DB) Init(dbname string) error {
-// 	var err error
-// 	d.db, err = sql.Open("sqlite3", dbname)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	err = d.db.Ping()
-// 	if err != nil {
-// 		return err
-// 	}
-// 	log.Debugf("Database %s open", dbname)
-// 	return nil
-// }
+func (d *DB) Close() error {
+	return d.db.Close()
+}
 
-// func NewUser(name, email string) User {
-// 	return User{
-// 		ID:      uuid.New(),
-// 		Name:    name,
-// 		Email:   email,
-// 		Created: time.Now(),
-// 	}
-// }
+func (d *DB) Init(dbname string) error {
+	var err error
+	d.db, err = sql.Open("sqlite3", dbname)
+	if err != nil {
+		return err
+	}
+	err = d.db.Ping()
+	if err != nil {
+		return err
+	}
+	log.Debugf("Database %s open", dbname)
+	return nil
+}
 
-// func (d *DB) CreateUser(ctx context.Context, user *User) error {
-// 	if err := ctx.Err(); err != nil {
-// 		return err
-// 	}
+func NewUser(name, email string) User {
+	return User{
+		ID:      uuid.New(),
+		Name:    name,
+		Email:   email,
+		Created: time.Now(),
+	}
+}
 
-// 	// TODO: More validations
-// 	if user == nil || user.ID == uuid.Nil {
-// 		return errors.ERR_BAD_DATA
-// 	}
+func (d *DB) CreateUser(ctx context.Context, user *User) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
-// 	// TODO: Error check or recovery
-// 	userid := user.ID.String()
-// 	statement, err := d.db.Prepare("INSERT INTO users (id, name, email, created, edited, deleted) VALUES (?,?,?,?,?)")
-// 	if err != nil {
-// 		log.
-// 			WithContext(ctx).
-// 			WithField("user_id", userid).
-// 			WithError(err).
-// 			Warn("error creating user")
+	// TODO: More validations
+	if user == nil || user.ID == uuid.Nil {
+		return errors.New("Invalid user data")
+	}
 
-// 		return err
-// 	}
-// 	_, err = statement.Exec(userid, user.Name, time.Now().Format(time.DateTime), user.Edited.Format(time.DateTime), user.Deleted.Format(time.DateTime))
-// 	if err != nil {
-// 		log.
-// 			WithContext(ctx).
-// 			WithField("user_id", userid).
-// 			WithError(err).
-// 			Warn("error creating user")
+	// TODO: Error check or recovery
+	userid := user.ID.String()
+	statement, err := d.db.Prepare("INSERT INTO users (id, name, email, created_at, updated_at, deleted_at) VALUES (?,?,?,?,?,?)")
+	if err != nil {
+		log.
+			WithContext(ctx).
+			WithField("user_id", userid).
+			WithError(err).
+			Warn("error creating user")
 
-// 		return err
-// 	}
-// 	logrus.Trace("Create User", userid, user.Name)
-// 	return nil
-// }
+		return err
+	}
+	_, err = statement.Exec(userid, user.Name, user.Email, user.Created.Format(time.DateTime), user.Edited.Format(time.DateTime), nil)
+	if err != nil {
+		log.
+			WithContext(ctx).
+			WithField("user_id", userid).
+			WithError(err).
+			Warn("error creating user")
 
-// func (d *DB) EditUser(ctx context.Context, userid IDT, user *User) error {
-// 	if err := ctx.Err(); err != nil {
-// 		return err
-// 	}
-// 	statement, err := d.db.Prepare("UPDATE users SET name = ? , email = ? , created = ?, edited = ?, deleted = ? WHERE id = ?")
-// 	if err != nil {
-// 		log.Errorf("Error edit user ", userid, err)
-// 		return err
-// 	}
-// 	_, err = statement.Exec(user.Name, user.Email, user.Created.Format(time.DateTime), time.Now().Format(time.DateTime), user.Deleted.Format(time.DateTime), userid.String())
-// 	if err != nil {
-// 		log.Errorf("Error Execute sql request ", err)
-// 		return err
-// 	}
-// 	logrus.Trace("Edit user", userid, user.Name)
-// 	return nil
-// }
+		return err
+	}
+	logrus.Trace("Create User", userid, user.Name)
+	return nil
+}
 
-// func (d *DB) DeleteUser(ctx context.Context, userid IDT) error {
-// 	if err := ctx.Err(); err != nil {
-// 		return err
-// 	}
-// 	statement, err := d.db.Prepare("DELETE FROM users WHERE id = ?")
-// 	if err != nil {
-// 		log.Errorf("Error delete User ", userid, err)
-// 		return err
-// 	}
-// 	_, err = statement.Exec(userid)
-// 	if err != nil {
-// 		log.Errorf("Error Execute sql request ", err)
-// 		return err
-// 	}
-// 	logrus.Trace("Delete user", userid)
-// 	return nil
-// }
+func (d *DB) EditUser(ctx context.Context, userid IDT, user *User) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	statement, err := d.db.Prepare("UPDATE users SET name = ? , email = ? , created_at = ?, updated_at = ?, deleted_at = ? WHERE id = ?")
+	if err != nil {
+		log.Errorf("Error edit user %s: %v", userid, err)
+		return err
+	}
+	_, err = statement.Exec(user.Name, user.Email, user.Created.Format(time.DateTime), time.Now().Format(time.DateTime), nil, userid.String())
+	if err != nil {
+		log.Errorf("Error executing SQL request: %v", err)
+		return err
+	}
+	logrus.Trace("Edit user", userid, user.Name)
+	return nil
+}
 
-// func (d *DB) GetUser(ctx context.Context, userid IDT) (User, error) {
-// 	var user User
-// 	var err error
-// 	var identif string
-// 	var id IDT
-// 	if err := ctx.Err(); err != nil {
-// 		return user, err
-// 	}
-// 	row := d.db.QueryRow("SELECT * FORM users WHERE id = ?", userid)
-// 	err = row.Scan(&identif, &user.Name, &user.Email, &user.Created, &user.Edited, &user.Deleted)
-// 	if err != nil {
-// 		log.Errorf("Error Scan sql request ", err)
-// 		return user, err
-// 	}
-// 	err = id.UnmarshalText([]byte(identif))
-// 	user.ID = id
-// 	if err != nil {
-// 		log.Errorf("Error Get user", userid, err)
-// 		return user, err
-// 	}
-// 	logrus.Trace("get info about user", user)
-// 	return user, nil
-// }
+func (d *DB) DeleteUser(ctx context.Context, userid IDT) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	// Soft delete - update deleted_at timestamp instead of actually deleting
+	statement, err := d.db.Prepare("UPDATE users SET deleted_at = ? WHERE id = ?")
+	if err != nil {
+		log.Errorf("Error preparing delete user %s: %v", userid, err)
+		return err
+	}
+	_, err = statement.Exec(time.Now().Format(time.DateTime), userid.String())
+	if err != nil {
+		log.Errorf("Error executing SQL request: %v", err)
+		return err
+	}
+	logrus.Trace("Delete user", userid)
+	return nil
+}
 
-// func (d *DB) GetUsers(ctx context.Context) ([]User, error) {
-// 	users := make([]User, 0, 16)
-// 	if err := ctx.Err(); err != nil {
-// 		return users, err
-// 	}
-// 	row, err := d.db.Query("SELECT * FORM users ")
-// 	if err != nil {
-// 		log.Errorf("Error GetUsers ", err)
-// 		return users, err
-// 	}
-// 	for row.Next() {
-// 		var user User
-// 		var identif string
-// 		var id IDT
-// 		row.Scan(&user.ID, &user.Name, &user.Email, &user.Created, &user.Edited, &user.Deleted)
-// 		err = id.UnmarshalText([]byte(identif))
-// 		user.ID = id
-// 		if err != nil {
-// 			log.Errorf("Error scan GetUsers", identif, err)
-// 			return users, err
-// 		}
-// 		users = append(users, user)
-// 		logrus.Trace("get info about user", user.ID, user.Name)
-// 	}
+func (d *DB) GetUser(ctx context.Context, userid IDT) (User, error) {
+	var user User
+	var err error
+	var id string
+	var createdAt, updatedAt, deletedAt sql.NullTime
 
-// 	return users, nil
-// }
+	if err := ctx.Err(); err != nil {
+		return user, err
+	}
 
-// func (d *DB) AddSshKey(ctx context.Context, userid IDT, key *SshKey) error {
-// 	if err := ctx.Err(); err != nil {
-// 		return err
-// 	}
-// 	var err error
-// 	statement, err := d.db.Prepare("INSERT INTO keys (id,user_id, name, type, key,  created, deleted) VALUES (?,?,?,?,?,?)")
-// 	if err != nil {
-// 		log.Errorf("Error AddSshKey ", userid, key, err)
-// 		return err
-// 	}
-// 	_, err = statement.Exec(key.ID.String(), key.UserID.String(), key.Name, key.Type, key.Data, time.Now().Format(time.DateTime), key.Deleted.Format(time.DateTime))
-// 	if err != nil {
-// 		log.Errorf("Error Execute sql request ", err) //
-// 		return err
-// 	}
-// 	logrus.Trace("Add SSH KEY", key, userid)
-// 	return nil
-// }
+	// Fixed typo in SQL query (FORM -> FROM) and added WHERE clause for non-deleted users
+	row := d.db.QueryRow("SELECT id, name, email, created_at, updated_at, deleted_at FROM users WHERE id = ? AND deleted_at IS NULL", userid)
+	err = row.Scan(&id, &user.Name, &user.Email, &createdAt, &updatedAt, &deletedAt)
+	if err != nil {
+		log.Errorf("Error scanning SQL result: %v", err)
+		return user, err
+	}
 
-// func (d *DB) DelSshKey(ctx context.Context, userid IDT, keyid IDT) error {
-// 	if err := ctx.Err(); err != nil {
-// 		return err
-// 	}
-// 	statement, err := d.db.Prepare("DELETE * FORM keys WHERE id = ?, AND WHERE user_id = ?")
-// 	if err != nil {
-// 		log.Errorf("Error DelSshKey ", userid, keyid, err)
-// 		return err
-// 	}
-// 	_, err = statement.Exec(keyid, userid)
-// 	if err != nil {
-// 		log.Errorf("Error Execute sql request ", err) //
-// 		return err
-// 	}
-// 	logrus.Trace("Delete SSH key ", userid, keyid)
-// 	return nil
-// }
+	// Set UUID directly from parameter
+	user.ID = userid
 
-// func (d *DB) GetSshKeys(ctx context.Context, userid IDT) ([]SshKey, error) {
-// 	keys := make([]SshKey, 0, 16)
-// 	if err := ctx.Err(); err != nil {
-// 		return keys, err
-// 	}
-// 	row, err := d.db.Query("SELECT * FROM keys WHERE user_id = ?", userid)
-// 	if err != nil {
-// 		log.Errorf("Error GetSshKeys ", userid, err)
-// 		return keys, err
-// 	}
-// 	for row.Next() {
-// 		var key SshKey
-// 		err = row.Scan(&key.ID, &key.UserID, &key.Name, &key.Type, &key.Data, &key.Created, &key.Deleted)
-// 		if err != nil {
-// 			log.Errorf("Error Scan sql request ", err) //
-// 			return keys, err
-// 		}
-// 		keys = append(keys, key)
-// 	}
-// 	logrus.Trace("Get SSH keys user ", userid)
-// 	return keys, nil
-// }
+	// Set timestamps
+	if createdAt.Valid {
+		user.Created = createdAt.Time
+	}
+	if updatedAt.Valid {
+		user.Edited = updatedAt.Time
+	}
+	if deletedAt.Valid {
+		user.Deleted = deletedAt.Time
+	}
+
+	log.Debugf("Got info about user %s", user.ID)
+	return user, nil
+}
+
+func (d *DB) GetUsers(ctx context.Context) ([]User, error) {
+	users := make([]User, 0, 16)
+	if err := ctx.Err(); err != nil {
+		return users, err
+	}
+
+	// Fixed typo in SQL query (FORM -> FROM) and added WHERE clause for non-deleted users
+	rows, err := d.db.Query("SELECT id, name, email, created_at, updated_at, deleted_at FROM users WHERE deleted_at IS NULL")
+	if err != nil {
+		log.Errorf("Error getting users: %v", err)
+		return users, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var user User
+		var id string
+		var createdAt, updatedAt, deletedAt sql.NullTime
+
+		err = rows.Scan(&id, &user.Name, &user.Email, &createdAt, &updatedAt, &deletedAt)
+		if err != nil {
+			log.Errorf("Error scanning user row: %v", err)
+			return users, err
+		}
+
+		// Parse UUID
+		user.ID, err = uuid.Parse(id)
+		if err != nil {
+			log.Errorf("Error parsing user ID: %v", err)
+			return users, err
+		}
+
+		// Set timestamps
+		if createdAt.Valid {
+			user.Created = createdAt.Time
+		}
+		if updatedAt.Valid {
+			user.Edited = updatedAt.Time
+		}
+		if deletedAt.Valid {
+			user.Deleted = deletedAt.Time
+		}
+
+		users = append(users, user)
+		logrus.Trace("Got info about user", user.ID, user.Name)
+	}
+
+	return users, nil
+}
+
+func (d *DB) AddSshKey(ctx context.Context, userid IDT, key *SshKey) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	// Validate key data
+	if key == nil || key.ID == uuid.Nil {
+		return errors.New("Invalid SSH key data")
+	}
+
+	// Prepare SQL statement
+	statement, err := d.db.Prepare("INSERT INTO keys (id, user_id, name, type, key, created_at, deleted_at) VALUES (?,?,?,?,?,?,?)")
+	if err != nil {
+		log.Errorf("Error preparing AddSshKey statement: %v", err)
+		return err
+	}
+
+	// Execute SQL statement
+	_, err = statement.Exec(
+		key.ID.String(),
+		key.UserID.String(),
+		key.Name,
+		key.Type,
+		key.Data,
+		key.Created.Format(time.DateTime),
+		nil) // No deletion date for new key
+
+	if err != nil {
+		log.Errorf("Error executing AddSshKey SQL: %v", err)
+		return err
+	}
+
+	log.Debugf("Added SSH key %s for user %s", key.ID, userid)
+	return nil
+}
+
+func (d *DB) DeleteSshKey(ctx context.Context, keyID IDT) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	// Soft delete - update deleted_at timestamp instead of actually deleting
+	statement, err := d.db.Prepare("UPDATE keys SET deleted_at = ? WHERE id = ?")
+	if err != nil {
+		log.Errorf("Error preparing DeleteSshKey statement: %v", err)
+		return err
+	}
+
+	// Execute SQL statement
+	_, err = statement.Exec(time.Now().Format(time.DateTime), keyID.String())
+	if err != nil {
+		log.Errorf("Error executing DeleteSshKey SQL: %v", err)
+		return err
+	}
+
+	log.Debugf("Deleted SSH key %s", keyID)
+	return nil
+}
+
+func (d *DB) GetSshKeys(ctx context.Context, userID IDT) ([]SshKey, error) {
+	keys := make([]SshKey, 0, 16)
+	if err := ctx.Err(); err != nil {
+		return keys, err
+	}
+
+	// Query SSH keys for the user that are not deleted
+	rows, err := d.db.Query("SELECT id, user_id, name, type, key, created_at, deleted_at FROM keys WHERE user_id = ? AND deleted_at IS NULL", userID.String())
+	if err != nil {
+		log.Errorf("Error querying SSH keys for user %s: %v", userID, err)
+		return keys, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var key SshKey
+		var id, userId string
+		var createdAt, deletedAt sql.NullTime
+
+		// Scan row into variables
+		err = rows.Scan(&id, &userId, &key.Name, &key.Type, &key.Data, &createdAt, &deletedAt)
+		if err != nil {
+			log.Errorf("Error scanning SSH key row: %v", err)
+			return keys, err
+		}
+
+		// Parse UUIDs
+		key.ID, err = uuid.Parse(id)
+		if err != nil {
+			log.Errorf("Error parsing SSH key ID: %v", err)
+			return keys, err
+		}
+
+		key.UserID, err = uuid.Parse(userId)
+		if err != nil {
+			log.Errorf("Error parsing SSH key user ID: %v", err)
+			return keys, err
+		}
+
+		// Set timestamps
+		if createdAt.Valid {
+			key.Created = createdAt.Time
+		}
+		if deletedAt.Valid {
+			key.Deleted = deletedAt.Time
+		}
+
+		keys = append(keys, key)
+	}
+
+	log.Debugf("Retrieved %d SSH keys for user %s", len(keys), userID)
+	return keys, nil
+}
 
 // func (d *DB) CreateRepo(ctx context.Context, repo *Repo) error {
 // 	if err := ctx.Err(); err != nil {
