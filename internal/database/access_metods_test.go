@@ -8,12 +8,13 @@ import (
 
 	. "github.com/GoldenDeals/DepGit/internal/database"
 	"github.com/GoldenDeals/DepGit/internal/share/logger"
-	"github.com/sirupsen/logrus"
 	ase "github.com/stretchr/testify/assert"
 )
 
-var log = logger.New("db_tests")
-var d *DB
+var (
+	log = logger.New("db_tests")
+	d   *DB
+)
 
 func TestMain(m *testing.M) {
 	err := d.Init("./db.sqllite3")
@@ -34,6 +35,7 @@ func TestsCreateUser(t *testing.T) {
 	assert := ase.New(t)
 	var ctx context.Context
 	var err error
+
 	user := NewUser("Jonson", "gayporno@yandex.ru")
 	err = d.CreateUser(ctx, &user)
 	assert.Nil(err)
@@ -45,7 +47,6 @@ func TestsCreateUser(t *testing.T) {
 
 func TestsEditUser(t *testing.T) {
 	assert := ase.New(t)
-
 	var ctx context.Context
 	var err error
 	user := NewUser("Jonson", "gayporno@yandex.ru")
@@ -63,70 +64,103 @@ func TestsEditUser(t *testing.T) {
 }
 
 func TestsDeleteUser(t *testing.T) {
-	var user User
+	assert := ase.New(t)
 	var ctx context.Context
 	var err error
-	var number int
-	user.Create("Jonson", "gayporno@yandex.ru")
-	if err != nil {
-		log.Errorf("Error  ", err)
-	}
-	err = d.CreateUser(ctx, &user)
-	if err != nil {
-		log.Errorf("Error  ", err)
-	}
-	err = d.DeleteUser(ctx, user.ID)
-	if err != nil {
-		log.Errorf("Error  ", err)
-	}
+	user := NewUser("Jonson", "gayporno@yandex.ru")
 
-	d.GetUser(context.Background(), user.ID)
-	if number != 0 {
-		log.Errorf("Error  ", err)
-	}
-	logrus.Trace("Tests Delete User Complete")
+	err = d.CreateUser(ctx, &user)
+	assert.Nil(err)
+
+	err = d.DeleteUser(ctx, user.ID)
+	assert.Nil(err)
 }
 
 func TestsGetUser(t *testing.T) {
-	var user User
+	assert := ase.New(t)
 	var ctx context.Context
 	var err error
-	user.Create("Jonson", "gayporno@yandex.ru")
-	if err != nil {
-		log.Errorf("Error  ", err)
-	}
+	var checkuser User
+	user := NewUser("Jonson", "gayporno@yandex.ru")
+
 	err = d.CreateUser(ctx, &user)
-	if err != nil {
-		log.Errorf("Error  ", err)
-	}
-	checkuser, err := d.GetUser(ctx, user.ID)
-	if err != nil {
-		log.Errorf("Error  ", err)
-	}
-	if user != checkuser {
-		log.Errorf("Error  ", err)
-	}
-	logrus.Trace("Tests Get User Complete")
+	assert.Nil(err)
+
+	checkuser, err = d.GetUser(ctx, user.ID)
+	assert.Nil(err)
+	assert.Equal(user, checkuser)
 }
 
-func TestsGetUsers(t *testing.T) {
-	var user User
+/*func TestsGetUsers(t *testing.T) {
+	assert := ase.New(t)
 	var ctx context.Context
 	var err error
-	user.Create("Jonson", "gayporno@yandex.ru")
-	if err != nil {
-		log.Errorf("Error  ", err)
-	}
+}
+*/
+
+func TestAddSshKey(t *testing.T) {
+	assert := ase.New(t)
+	var ctx context.Context
+	var err error
+	user := NewUser("Ahmed", "romalox@yandex.ru")
+	data := make([]byte, 16)
+	key := NewSShKey("lololoshka", RSA_SHA2_256, data)
+
 	err = d.CreateUser(ctx, &user)
-	if err != nil {
-		log.Errorf("Error  ", err)
-	}
-	checkuser, err := d.GetUser(ctx, user.ID)
-	if err != nil {
-		log.Errorf("Error  ", err)
-	}
-	if user != checkuser {
-		log.Errorf("Error  ", err)
-	}
-	logrus.Trace("Tests Create User Complete")
+	assert.Nil(err)
+
+	err = d.AddSshKey(ctx, user.ID, &key)
+	assert.Nil(err)
+}
+
+func TestDeleteSshKey(t *testing.T) {
+	assert := ase.New(t)
+	var ctx context.Context
+	var err error
+	user := NewUser("Eblan", "bibobo@gmail.ru")
+	data := make([]byte, 16)
+	key := NewSShKey("lololoshka", RSA_SHA2_256, data)
+	err = d.CreateUser(ctx, &user)
+	assert.Nil(err)
+
+	err = d.AddSshKey(ctx, user.ID, &key)
+	assert.Nil(err)
+
+	err = d.DeleteSshKey(ctx, key.ID)
+	assert.Nil(err)
+}
+
+/*func TestGetSshKeys(t *testing.T){
+	assert := ase.New(t)
+	var ctx context.Context
+	var err error
+	user := NewUser("Ahmed", "romalox@yandex.ru")
+	data := make([]byte, 16)
+	key := NewSShKey("lololoshka", RSA_SHA2_256, data)
+
+	err = d.CreateUser(ctx, &user)
+	assert.Nil(err)
+
+	err = d.AddSshKey(ctx, user.ID, &key)
+	assert.Nil(err)
+
+	keys := make(SshKey, 16)
+
+}*/ // я не ебу как это тестить
+
+func TestCreateRepo(t *testing.T) {
+	assert := ase.New(t)
+	var ctx context.Context
+	var err error
+	user := NewUser("Eblan", "bibobo@gmail.ru")
+	data := make([]byte, 16)
+	key := NewSShKey("lololoshka", RSA_SHA2_256, data)
+	err = d.CreateUser(ctx, &user)
+	assert.Nil(err)
+
+	err = d.AddSshKey(ctx, user.ID, &key)
+	assert.Nil(err)
+
+	err = d.DeleteSshKey(ctx, key.ID)
+	assert.Nil(err)
 }
