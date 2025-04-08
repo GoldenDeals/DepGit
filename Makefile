@@ -1,4 +1,4 @@
-.PHONY: clear live lint db-migrate build build-debug build-release test test-verbose test-coverage test-html test-git
+.PHONY: clear live lint db-migrate build build-debug build-release test test-verbose test-coverage test-html test-git gen-api
 
 # Build variables
 VERSION ?= $(shell git describe --tags --always --dirty || echo "unknown")
@@ -64,3 +64,8 @@ test-html: test-coverage
 test-git:
 	@echo "Running git test script..."
 	@scripts/test-git.sh
+
+gen-api:
+	@echo "Generating API code from OpenAPI spec..."
+	@mkdir -p internal/gen/api
+	@$(HOME)/go/bin/oapi-codegen -package api -generate types,server,spec api/openapi.yaml > internal/gen/api/api.go
