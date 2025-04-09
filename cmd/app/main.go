@@ -1,31 +1,48 @@
 package main
 
 import (
-	"fmt"
+	"log"
+	"os"
+	"path/filepath"
 
+	"github.com/GoldenDeals/DepGit/internal/config"
+	"github.com/GoldenDeals/DepGit/internal/database"
 	"github.com/GoldenDeals/DepGit/internal/share/logger"
-	"github.com/google/uuid"
-	"github.com/joho/godotenv"
 )
 
-var log = logger.New("main")
+var mainLogger = logger.New("main")
 
 func main() {
-	err := godotenv.Load(".env")
+	// Load configuration from .env file and environment variables
+	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	err = fmt.Errorf("some error")
-	log.
-		WithField("user_id", uuid.New().String()).
-		WithError(err).
-		Error("error creating user")
+	// Create necessary directories
+	dbDir := filepath.Dir(cfg.GetDatabasePath())
+	if err := os.MkdirAll(dbDir, 0755); err != nil {
+		mainLogger.Fatalf("Failed to create database directory: %v", err)
+	}
 
-	// s, err := git.Init(git.Config{os.Getenv("DEPGIT_SSH_GIT_ADDRESS")})
-	// if err != nil {
-	// 	log.Fatalln(err)
-	// }
+	// Create migrations directory if specified
+	if cfg.DB.MigrationsPath != "" {
+		if err := os.MkdirAll(cfg.DB.MigrationsPath, 0755); err != nil {
+			mainLogger.Fatalf("Failed to create migrations directory: %v", err)
+		}
+	}
 
-	// log.Fatalln(s.Serve(context.Background()))
+	// Initialize the database
+	mainLogger.Info("Initializing database...")
+	db := &database.DB{}
+	if err := db.Init(cfg); err != nil {
+		mainLogger.Fatalf("Failed to initialize database: %v", err)
+	}
+	defer db.Close()
+
+	mainLogger.Info("DepGit server starting")
+	// TODO: Add server initialization and other startup logic here
+
+	// Keep the server running
+	select {}
 }

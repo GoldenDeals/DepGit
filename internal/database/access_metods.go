@@ -3,13 +3,17 @@ package database
 import (
 	"context"
 	"database/sql"
+	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/GoldenDeals/DepGit/internal/share/errors"
+	"github.com/GoldenDeals/DepGit/internal/config"
+	migrations "github.com/GoldenDeals/DepGit/internal/database/migrations"
+	errors "github.com/GoldenDeals/DepGit/internal/share/error"
 	"github.com/GoldenDeals/DepGit/internal/share/logger"
 	"github.com/gobwas/glob"
 	"github.com/google/uuid"
+	_ "github.com/mattn/go-sqlite3" // SQLite driver
 	"github.com/sirupsen/logrus"
 )
 
@@ -22,7 +26,8 @@ const (
 	// .... TODO: Добавить еще
 )
 
-var log = logger.New("db")
+// Logger for database access
+var dbLogger = logger.New("db_access")
 
 type (
 	IDT          = uuid.UUID
@@ -80,16 +85,19 @@ type Classes interface {
 }
 
 type DB struct {
-	db *sql.DB
+	db               *sql.DB
+	migrationManager *migrations.Manager
+	config           *config.Configuration
 }
 
 func (d *DB) Close() error {
 	return d.db.Close()
 }
 
-func (d *DB) Init(dbname string) error {
+func (d *DB) Init(cfg *config.Configuration) error {
 	var err error
-	d.db, err = sql.Open("sqlite3", dbname)
+	d.config = cfg
+	d.db, err = sql.Open("sqlite3", cfg.GetDatabasePath())
 	if err != nil {
 		return err
 	}
@@ -97,7 +105,41 @@ func (d *DB) Init(dbname string) error {
 	if err != nil {
 		return err
 	}
-	log.Debugf("Database %s open", dbname)
+
+	// Initialize the migration manager
+	d.migrationManager = migrations.New(d.db)
+
+	// Initialize the migrations table
+	ctx := context.Background()
+	err = d.migrationManager.Initialize(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Check if custom migrations path is configured
+	migrationsDir := d.config.DB.MigrationsPath
+	if migrationsDir == "" {
+		migrationsDir = filepath.Join(filepath.Dir(cfg.GetDatabasePath()), "migrations")
+	}
+
+	err = d.migrationManager.LoadFromDir(ctx, migrationsDir)
+	if err != nil {
+		dbLogger.
+			WithContext(ctx).
+			WithField("error", err).
+			Warn("Failed to load migrations")
+	}
+
+	// Apply migrations
+	err = d.migrationManager.Apply(ctx)
+	if err != nil {
+		return err
+	}
+
+	dbLogger.
+		WithContext(ctx).
+		WithField("database", cfg.GetDatabasePath()).
+		Info("Database open")
 	return nil
 }
 
@@ -111,26 +153,30 @@ func NewUser(name, email string) User {
 }
 
 func (d *DB) CreateUser(ctx context.Context, user *User) error {
+	if user == nil {
+		return errors.ERR_BAD_DATA
+	}
+
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
 	// TODO: More validations
-	if user == nil || user.ID == uuid.Nil || user.Name == "" || user.Email == "" || !strings.ContainsRune(user.Email, '@') {
+	if user.ID == uuid.Nil || user.Name == "" || user.Email == "" || !strings.ContainsRune(user.Email, '@') {
 		return errors.ERR_BAD_DATA
 	}
 
 	// TODO: Error check or recovery
 	userid := user.ID.String()
 	var n int
-	row := d.db.QueryRow("SELECT COUNT(user_id) FROM  users WHERE userid = ?", userid)
+	row := d.db.QueryRow("SELECT COUNT(id) FROM users WHERE id = ?", userid)
 	row.Scan(&n)
 	if n > 0 {
 		return errors.ERR_ALREADY_EXISTS
 	}
-	statement, err := d.db.Prepare("INSERT INTO users (id, name, email, created, edited, deleted) VALUES (?,?,?,?,?)")
+	statement, err := d.db.Prepare("INSERT INTO users (id, name, email, created, edited, deleted) VALUES (?,?,?,?,?,?)")
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("user_id", userid).
 			WithError(err).
@@ -138,9 +184,9 @@ func (d *DB) CreateUser(ctx context.Context, user *User) error {
 
 		return err
 	}
-	_, err = statement.Exec(userid, user.Name, time.Now().Format(time.DateTime), user.Edited.Format(time.DateTime), user.Deleted.Format(time.DateTime))
+	_, err = statement.Exec(userid, user.Name, user.Email, time.Now().Format(time.DateTime), user.Edited.Format(time.DateTime), user.Deleted.Format(time.DateTime))
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("user_id", userid).
 			WithError(err).
@@ -163,7 +209,7 @@ func (d *DB) EditUser(ctx context.Context, userid IDT, user *User) error {
 
 	statement, err := d.db.Prepare("UPDATE users SET name = ? , email = ? , created = ?, edited = ?, deleted = ? WHERE id = ?")
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("user_id", userid).
 			WithError(err).
@@ -172,7 +218,7 @@ func (d *DB) EditUser(ctx context.Context, userid IDT, user *User) error {
 	}
 	_, err = statement.Exec(user.Name, user.Email, user.Created.Format(time.DateTime), time.Now().Format(time.DateTime), user.Deleted.Format(time.DateTime), userid.String())
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("user_id", userid).
 			WithError(err).
@@ -188,20 +234,25 @@ func (d *DB) DeleteUser(ctx context.Context, userid IDT) error {
 		return err
 	}
 
-	if len(userid) != 36 {
+	if userid == uuid.Nil {
 		return errors.ERR_BAD_DATA
 	}
 
 	var n int
-	row := d.db.QueryRow("SELECT COUNT(userid) FROM users WHERE userid = ?", userid)
-	row.Scan(&n)
+	row := d.db.QueryRow("SELECT COUNT(id) FROM users WHERE id = ?", userid)
+	err := row.Scan(&n)
+	if err != nil {
+		dbLogger.WithContext(ctx).WithError(err).Warn("error checking user existence")
+		return err
+	}
+
 	if n == 0 {
 		return errors.ERR_NOT_FOUND
 	}
 
 	statement, err := d.db.Prepare("DELETE FROM users WHERE id = ?")
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("user_id", userid).
 			WithError(err).
@@ -210,7 +261,7 @@ func (d *DB) DeleteUser(ctx context.Context, userid IDT) error {
 	}
 	_, err = statement.Exec(userid)
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("user_id", userid).
 			WithError(err).
@@ -223,41 +274,46 @@ func (d *DB) DeleteUser(ctx context.Context, userid IDT) error {
 
 func (d *DB) GetUser(ctx context.Context, userid IDT) (User, error) {
 	var user User
-	var err error
-	var identif string
-	var id IDT
 	if err := ctx.Err(); err != nil {
 		return user, err
 	}
-	if len(userid) != 36 {
-		return errors.ERR_BAD_DATA
+	if userid == uuid.Nil {
+		return user, errors.ERR_BAD_DATA
 	}
 	var n int
-	row := d.db.QueryRow("SELECT COUNT(userid) FROM users WHERE userid = ?", userid)
-	row.Scan(&n)
+	row := d.db.QueryRow("SELECT COUNT(id) FROM users WHERE id = ?", userid)
+	err := row.Scan(&n)
+	if err != nil {
+		dbLogger.WithContext(ctx).WithError(err).Warn("error checking user existence")
+		return user, err
+	}
+
 	if n == 0 {
-		return errors.ERR_NOT_FOUND
+		return user, errors.ERR_NOT_FOUND
 	}
-	row = d.db.QueryRow("SELECT * FORM users WHERE id = ?", userid)
-	err = row.Scan(&identif, &user.Name, &user.Email, &user.Created, &user.Edited, &user.Deleted)
+
+	row = d.db.QueryRow("SELECT id, name, email, created, edited, deleted FROM users WHERE id = ?", userid)
+	var idStr string
+	err = row.Scan(&idStr, &user.Name, &user.Email, &user.Created, &user.Edited, &user.Deleted)
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("user_id", userid).
 			WithError(err).
 			Warn("error get user")
 		return user, err
 	}
-	err = id.UnmarshalText([]byte(identif))
-	user.ID = id
+
+	user.ID, err = uuid.Parse(idStr)
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("user_id", userid).
 			WithError(err).
-			Warn("error get user")
+			Warn("error parsing user id")
 		return user, err
 	}
+
 	logrus.Trace("get info about user", user)
 	return user, nil
 }
@@ -267,31 +323,49 @@ func (d *DB) GetUsers(ctx context.Context) ([]User, error) {
 	if err := ctx.Err(); err != nil {
 		return users, err
 	}
-	row, err := d.db.Query("SELECT * FORM users ")
+
+	rows, err := d.db.Query("SELECT id, name, email, created, edited, deleted FROM users")
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithError(err).
-			Warn("error gets user")
+			Warn("error fetching users")
 		return users, err
 	}
-	for row.Next() {
+	defer rows.Close()
+
+	for rows.Next() {
 		var user User
-		var identif string
-		var id IDT
-		row.Scan(&user.ID, &user.Name, &user.Email, &user.Created, &user.Edited, &user.Deleted)
-		err = id.UnmarshalText([]byte(identif))
-		user.ID = id
+		var idStr string
+		err = rows.Scan(&idStr, &user.Name, &user.Email, &user.Created, &user.Edited, &user.Deleted)
 		if err != nil {
-			log.
+			dbLogger.
 				WithContext(ctx).
-				WithField("user_id", identif).
 				WithError(err).
-				Warn("error get user")
+				Warn("error scanning user row")
 			return users, err
 		}
+
+		user.ID, err = uuid.Parse(idStr)
+		if err != nil {
+			dbLogger.
+				WithContext(ctx).
+				WithField("user_id", idStr).
+				WithError(err).
+				Warn("error parsing user id")
+			return users, err
+		}
+
 		users = append(users, user)
 		logrus.Trace("get info about user", user.ID, user.Name)
+	}
+
+	if err = rows.Err(); err != nil {
+		dbLogger.
+			WithContext(ctx).
+			WithError(err).
+			Warn("error iterating user rows")
+		return users, err
 	}
 
 	return users, nil
@@ -311,19 +385,28 @@ func (d *DB) AddSshKey(ctx context.Context, userid IDT, key *SshKey) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if userid == uuid.Nil || key.ID == uuid.Nil || key.Name == "" || key.Type > 5 || key.UserID == uuid.Nil {
+	// Set the UserID to the provided userid
+	key.UserID = userid
+
+	if userid == uuid.Nil || key.ID == uuid.Nil || key.Name == "" || key.Type > 5 {
 		return errors.ERR_BAD_DATA
 	}
-	row := d.db.QueryRow("SELECT COUNT(id) FROM  keys WHERE userid = ? AND WHERE key = ?", userid, key.Data)
+	// Check if key already exists
+	row := d.db.QueryRow("SELECT COUNT(id) FROM keys WHERE user_id = ? AND data = ?", userid, key.Data)
 	var n int
-	row.Scan(&n)
+	var err error
+	err = row.Scan(&n)
+	if err != nil {
+		dbLogger.WithContext(ctx).WithError(err).Warn("error checking key existence")
+		return err
+	}
+
 	if n > 0 {
 		return errors.ERR_ALREADY_EXISTS
 	}
-	var err error
-	statement, err := d.db.Prepare("INSERT INTO keys (id,user_id, name, type, key,  created, deleted) VALUES (?,?,?,?,?,?)")
+	statement, err := d.db.Prepare("INSERT INTO keys (id, user_id, name, type, data, created, deleted) VALUES (?,?,?,?,?,?,?)")
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("user_id", userid).
 			WithField("key", key.ID).
@@ -333,7 +416,7 @@ func (d *DB) AddSshKey(ctx context.Context, userid IDT, key *SshKey) error {
 	}
 	_, err = statement.Exec(key.ID.String(), key.UserID.String(), key.Name, key.Type, key.Data, time.Now().Format(time.DateTime), key.Deleted.Format(time.DateTime))
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("user_id", userid).
 			WithField("key", key.ID).
@@ -356,9 +439,9 @@ func (d *DB) DeleteSshKey(ctx context.Context, keyid IDT) error {
 	if n == 0 {
 		return errors.ERR_NOT_FOUND
 	}
-	statement, err := d.db.Prepare("DELETE * FORM keys WHERE id = ?")
+	statement, err := d.db.Prepare("DELETE FROM keys WHERE id = ?")
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("key_id", keyid).
 			WithError(err).
@@ -367,7 +450,7 @@ func (d *DB) DeleteSshKey(ctx context.Context, keyid IDT) error {
 	}
 	_, err = statement.Exec(keyid)
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("key_id", keyid).
 			WithError(err).
@@ -384,17 +467,17 @@ func (d *DB) GetSshKeys(ctx context.Context, userid IDT) ([]SshKey, error) {
 		return keys, err
 	}
 	if userid == uuid.Nil {
-		return errors.ERR_BAD_DATA
+		return keys, errors.ERR_BAD_DATA
 	}
 	len := d.db.QueryRow("SELECT COUNT(id) FROM  keys  WHERE user_id = ?", userid)
 	var n int
 	len.Scan(&n)
 	if n == 0 {
-		return errors.ERR_NOT_FOUND
+		return keys, errors.ERR_NOT_FOUND
 	}
 	row, err := d.db.Query("SELECT * FROM keys WHERE user_id = ?", userid)
 	if err != nil { //
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("user_id", userid).
 			WithError(err).
@@ -405,7 +488,7 @@ func (d *DB) GetSshKeys(ctx context.Context, userid IDT) ([]SshKey, error) {
 		var key SshKey
 		err = row.Scan(&key.ID, &key.UserID, &key.Name, &key.Type, &key.Data, &key.Created, &key.Deleted)
 		if err != nil {
-			log.
+			dbLogger.
 				WithContext(ctx).
 				WithField("user_id", userid).
 				WithError(err).
@@ -432,26 +515,34 @@ func (d *DB) CreateRepo(ctx context.Context, repo *Repo) error {
 	if repo.ID == uuid.Nil || repo.Name == "" {
 		return errors.ERR_BAD_DATA
 	}
-	statement, err := d.db.Prepare("INSERT INTO permitions (id, name, created, edited ,deleted) VALUES (?, ?,?, ?, ?)")
+	statement, err := d.db.Prepare("INSERT INTO permitions (id, name, created, edited, deleted) VALUES (?, ?, ?, ?, ?)")
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("repoid", repo.ID).
 			WithError(err).
 			Warn("error create repo")
 		return err
 	}
-	repoid := uuid.New().String()
-	_, err = statement.Exec(repoid, repo.Name, time.Now().Format(time.DateTime), repo.Edited, repo.Deleted.Format(time.DateTime))
+	defer statement.Close()
+
+	// Use the repo ID directly
+	_, err = statement.Exec(
+		repo.ID.String(),
+		repo.Name,
+		time.Now().Format(time.DateTime),
+		repo.Edited.Format(time.DateTime),
+		repo.Deleted.Format(time.DateTime),
+	)
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("repoid", repo.ID).
 			WithError(err).
 			Warn("error create repo")
 		return err
 	}
-	logrus.Trace("Create Repositor", repo.ID)
+	logrus.Trace("Create Repository", repo.ID)
 	return nil
 }
 
@@ -462,9 +553,9 @@ func (d *DB) DeleteRepo(ctx context.Context, repoid IDT) error {
 	if repoid == uuid.Nil {
 		return errors.ERR_BAD_DATA
 	}
-	statement, err := d.db.Prepare("DELETE * FORM permitions WHERE id = ?")
+	statement, err := d.db.Prepare("DELETE FROM permitions WHERE id = ?")
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("repoid", repoid).
 			WithError(err).
@@ -473,7 +564,7 @@ func (d *DB) DeleteRepo(ctx context.Context, repoid IDT) error {
 	}
 	_, err = statement.Exec(repoid)
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("repoid", repoid).
 			WithError(err).
@@ -495,7 +586,7 @@ func (d *DB) UpdateRepo(ctx context.Context, repoid IDT, repo Repo) error {
 
 	statement, err := d.db.Prepare("UPDATE permitions SET name = ? , created = ?, deleted = ? WHERE id = ?")
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("repoid", repoid).
 			WithError(err).
@@ -504,7 +595,7 @@ func (d *DB) UpdateRepo(ctx context.Context, repoid IDT, repo Repo) error {
 	}
 	_, err = statement.Exec(repo.Name, repo.Created.Format(time.DateTime), repo.Deleted.Format(time.DateTime), repoid.String())
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("repoid", repoid).
 			WithError(err).
@@ -521,76 +612,95 @@ func (d *DB) GetRepo(ctx context.Context, repoid IDT) (Repo, error) {
 		return repo, err
 	}
 	if repoid == uuid.Nil {
-		return errors.ERR_BAD_DATA
+		return repo, errors.ERR_BAD_DATA
 	}
-	row, err := d.db.Query("SELECT * FORM permitions WHERE id = ?", repoid)
+
+	var n int
+	row := d.db.QueryRow("SELECT COUNT(id) FROM permitions WHERE id = ?", repoid)
+	err := row.Scan(&n)
 	if err != nil {
-		log.
+		dbLogger.WithContext(ctx).WithError(err).Warn("error checking repo existence")
+		return repo, err
+	}
+
+	if n == 0 {
+		return repo, errors.ERR_NOT_FOUND
+	}
+
+	row = d.db.QueryRow("SELECT id, name, created, edited, deleted FROM permitions WHERE id = ?", repoid)
+	var idStr string
+	err = row.Scan(&idStr, &repo.Name, &repo.Created, &repo.Edited, &repo.Deleted)
+	if err != nil {
+		dbLogger.
 			WithContext(ctx).
 			WithField("repoid", repoid).
 			WithError(err).
 			Warn("error get repo")
 		return repo, err
 	}
-	var identif string
-	var id IDT
-	err = row.Scan(&identif, &repo.Name, &repo.Created, &repo.Edited, &repo.Deleted)
+
+	repo.ID, err = uuid.Parse(idStr)
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
-			WithField("repoid", repoid).
+			WithField("repoid", idStr).
 			WithError(err).
-			Warn("error get repo")
+			Warn("error parsing repo id")
 		return repo, err
 	}
-	err = id.UnmarshalText([]byte(identif))
-	repo.ID = id
-	if err != nil {
-		log.
-			WithContext(ctx).
-			WithField("repoid", repoid).
-			WithError(err).
-			Warn("error get repo")
-		return repo, err
-	}
+
 	logrus.Trace("get info about Repositor ", repo.ID)
 	return repo, nil
 }
 
 func (d *DB) GetRepos(ctx context.Context) ([]Repo, error) {
-	var err error
 	repos := make([]Repo, 0, 16)
 	if err := ctx.Err(); err != nil {
 		return repos, err
 	}
-	row, err := d.db.Query("SELECT * FORM permitions ")
+
+	rows, err := d.db.Query("SELECT id, name, created, edited, deleted FROM permitions")
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithError(err).
-			Warn("error gets repo")
+			Warn("error fetching repos")
 		return repos, err
 	}
-	for row.Next() {
+	defer rows.Close()
+
+	for rows.Next() {
 		var repo Repo
-		var identif string
-		var id IDT
-		err = row.Scan(&identif, &repo.Name, &repo.Created, &repo.Deleted)
+		var idStr string
+		err = rows.Scan(&idStr, &repo.Name, &repo.Created, &repo.Edited, &repo.Deleted)
 		if err != nil {
-			log.
+			dbLogger.
 				WithContext(ctx).
 				WithError(err).
-				Warn("error gets repo")
+				Warn("error scanning repo row")
 			return repos, err
 		}
-		err = id.UnmarshalText([]byte(identif))
-		repo.ID = id
+
+		repo.ID, err = uuid.Parse(idStr)
 		if err != nil {
-			log.WithContext(ctx).WithField("user_id", identif).WithError(err).Warn("error creating user")
+			dbLogger.
+				WithContext(ctx).
+				WithField("repo_id", idStr).
+				WithError(err).
+				Warn("error parsing repo id")
 			return repos, err
 		}
+
 		repos = append(repos, repo)
 		logrus.Trace("get info about Repositor", repo.ID)
+	}
+
+	if err = rows.Err(); err != nil {
+		dbLogger.
+			WithContext(ctx).
+			WithError(err).
+			Warn("error iterating repo rows")
+		return repos, err
 	}
 
 	return repos, nil
@@ -603,26 +713,35 @@ func (d *DB) CreateAccessRole(ctx context.Context, ar *AccessRole) error {
 	if ar.UserID == uuid.Nil || ar.RepoID == uuid.Nil || ar.RoleID == uuid.Nil {
 		return errors.ERR_BAD_DATA
 	}
-	statement, err := d.db.Prepare("INSERT INTO roles (role_id ,user_id, rep_id , branch, created, deleted) VALUES (?,?, ?,?, ?, ?)")
+	statement, err := d.db.Prepare("INSERT INTO roles (role_id, user_id, rep_id, branch, created, deleted) VALUES (?, ?, ?, ?, ?, ?)")
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
-			WithField("role ", ar.RoleID).
+			WithField("role", ar.RoleID).
 			WithError(err).
 			Warn("error create role")
 		return err
 	}
-	roleid := uuid.New().String()
-	_, err = statement.Exec(roleid, ar.UserID, ar.RepoID, ar.Branches, ar.Created.Format(time.DateTime), ar.Deleted.Format(time.DateTime))
+	defer statement.Close()
+
+	// Use the role's ID directly
+	_, err = statement.Exec(
+		ar.RoleID.String(),
+		ar.UserID.String(),
+		ar.RepoID.String(),
+		ar.Branches,
+		ar.Created.Format(time.DateTime),
+		ar.Deleted.Format(time.DateTime),
+	)
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
-			WithField("role ", roleid).
+			WithField("role", ar.RoleID).
 			WithError(err).
 			Warn("error create role")
 		return err
 	}
-	logrus.Trace("Create Repositor", ar)
+	logrus.Trace("Create Role", ar.RoleID)
 	return nil
 }
 
@@ -635,7 +754,7 @@ func (d *DB) EditAccessRole(ctx context.Context, roleid IDT, ar *AccessRole) err
 	}
 	statement, err := d.db.Prepare("UPDATE roles SET user_id = ?, rep_id = ?, branch = ?, created = ?, deleted = ? WHERE role_id = ?")
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("role ", roleid).
 			WithError(err).
@@ -644,7 +763,7 @@ func (d *DB) EditAccessRole(ctx context.Context, roleid IDT, ar *AccessRole) err
 	}
 	_, err = statement.Exec(ar.UserID.String(), ar.RepoID.String(), ar.Branches, ar.Created.Format(time.DateTime), ar.Deleted.Format(time.DateTime), ar.RoleID.String())
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("role ", ar.RoleID).
 			WithError(err).
@@ -662,9 +781,9 @@ func (d *DB) DeleteAccessRole(ctx context.Context, roleid IDT) error {
 	if roleid == uuid.Nil {
 		return errors.ERR_BAD_DATA
 	}
-	statement, err := d.db.Prepare("DELETE * FORM roles WHERE role_id = ?")
+	statement, err := d.db.Prepare("DELETE FROM roles WHERE role_id = ?")
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("role ", roleid).
 			WithError(err).
@@ -673,7 +792,7 @@ func (d *DB) DeleteAccessRole(ctx context.Context, roleid IDT) error {
 	}
 	_, err = statement.Exec(roleid)
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithField("role ", roleid).
 			WithError(err).
@@ -686,53 +805,82 @@ func (d *DB) DeleteAccessRole(ctx context.Context, roleid IDT) error {
 
 func (d *DB) GetAccessRole(ctx context.Context, roleid IDT) (AccessRole, error) {
 	var role AccessRole
-	var err error
 	if err := ctx.Err(); err != nil {
 		return role, err
 	}
 	if roleid == uuid.Nil {
-		return errors.ERR_BAD_DATA
+		return role, errors.ERR_BAD_DATA
 	}
-	row := d.db.QueryRow("SELECT * FORM roles WHERE id = ?", roleid)
+
+	var count int
+	err := d.db.QueryRow("SELECT COUNT(*) FROM roles WHERE role_id = ?", roleid.String()).Scan(&count)
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
-			WithField("role ", roleid).
+			WithField("role_id", roleid).
 			WithError(err).
-			Warn("error get role")
+			Warn("error checking role existence")
 		return role, err
 	}
-	var idrole, iduser, idrepo IDT
-	var identifRole, identifUser, identifReposit string
-	row.Scan(&identifRole, &identifUser, &identifReposit, &role.Branches, &role.Created, &role.Deleted)
-	err = idrole.UnmarshalText([]byte(identifRole))
+
+	if count == 0 {
+		return role, errors.ERR_NOT_FOUND
+	}
+
+	// Variables to store the data
+	var roleIDStr, userIDStr, repoIDStr string
+
+	// Query the role
+	row := d.db.QueryRow("SELECT role_id, user_id, rep_id, branch, created, deleted FROM roles WHERE role_id = ?", roleid.String())
+
+	// Scan the row into variables
+	err = row.Scan(&roleIDStr, &userIDStr, &repoIDStr, &role.Branches, &role.Created, &role.Deleted)
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
-			WithField("role ", roleid).
+			WithField("role_id", roleid).
 			WithError(err).
-			Warn("error get role")
+			Warn("error scanning role")
 		return role, err
 	}
-	err = iduser.UnmarshalText([]byte(identifUser))
+
+	// Parse the role ID
+	roleID, err := uuid.Parse(roleIDStr)
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
-			WithField("role ", roleid).
+			WithField("role_id_str", roleIDStr).
 			WithError(err).
-			Warn("error get role")
+			Warn("error parsing role ID")
 		return role, err
 	}
-	err = idrepo.UnmarshalText([]byte(identifReposit))
+	role.RoleID = roleID
+
+	// Parse the user ID
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
-			WithField("role ", roleid).
+			WithField("user_id_str", userIDStr).
 			WithError(err).
-			Warn("error get role")
+			Warn("error parsing user ID")
 		return role, err
 	}
-	logrus.Trace("get info about Role ", role)
+	role.UserID = userID
+
+	// Parse the repo ID
+	repoID, err := uuid.Parse(repoIDStr)
+	if err != nil {
+		dbLogger.
+			WithContext(ctx).
+			WithField("repo_id_str", repoIDStr).
+			WithError(err).
+			Warn("error parsing repo ID")
+		return role, err
+	}
+	role.RepoID = repoID
+
+	dbLogger.WithContext(ctx).Debug("Retrieved role information")
 	return role, nil
 }
 
@@ -741,50 +889,73 @@ func (d *DB) GetAccessRoles(ctx context.Context) ([]AccessRole, error) {
 	if err := ctx.Err(); err != nil {
 		return roles, err
 	}
-	row, err := d.db.Query("SELECT * FORM roles ")
+
+	rows, err := d.db.Query("SELECT role_id, user_id, rep_id, branch, created, deleted FROM roles")
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithError(err).
 			Warn("error get roles")
 		return roles, err
 	}
-	for row.Next() {
-		var idrole, iduser, idrepo IDT
-		var identifRole, identifUser, identifReposit string
+	defer rows.Close()
+
+	for rows.Next() {
 		var role AccessRole
-		row.Scan(&identifRole, &identifUser, &identifReposit, &role.Branches, &role.Created, &role.Deleted)
-		err = idrole.UnmarshalText([]byte(identifRole))
+		var roleIDStr, userIDStr, repoIDStr string
+
+		err = rows.Scan(&roleIDStr, &userIDStr, &repoIDStr, &role.Branches, &role.Created, &role.Deleted)
 		if err != nil {
-			log.
+			dbLogger.
 				WithContext(ctx).
 				WithError(err).
-				Warn("error get roles")
+				Warn("error scanning role")
 			return roles, err
 		}
-		err = iduser.UnmarshalText([]byte(identifUser))
+
+		// Parse IDs
+		role.RoleID, err = uuid.Parse(roleIDStr)
 		if err != nil {
-			log.
+			dbLogger.
 				WithContext(ctx).
+				WithField("role_id_str", roleIDStr).
 				WithError(err).
-				Warn("error get roles")
+				Warn("error parsing role ID")
 			return roles, err
 		}
-		err = idrepo.UnmarshalText([]byte(identifReposit))
+
+		role.UserID, err = uuid.Parse(userIDStr)
 		if err != nil {
-			log.
+			dbLogger.
 				WithContext(ctx).
+				WithField("user_id_str", userIDStr).
 				WithError(err).
-				Warn("error get roles")
+				Warn("error parsing user ID")
 			return roles, err
 		}
+
+		role.RepoID, err = uuid.Parse(repoIDStr)
 		if err != nil {
-			log.WithContext(ctx).WithField("user_id", identifRole).WithError(err).Warn("error creating user")
+			dbLogger.
+				WithContext(ctx).
+				WithField("repo_id_str", repoIDStr).
+				WithError(err).
+				Warn("error parsing repo ID")
 			return roles, err
 		}
-		logrus.Trace("get info about Role ", role)
+
 		roles = append(roles, role)
+		logrus.Trace("get info about Role", role.RoleID)
 	}
+
+	if err = rows.Err(); err != nil {
+		dbLogger.
+			WithContext(ctx).
+			WithError(err).
+			Warn("error iterating role rows")
+		return roles, err
+	}
+
 	return roles, nil
 }
 
@@ -795,13 +966,13 @@ func (d *DB) UserByKey(ctx context.Context, key []byte) (User, error) {
 		return user, err
 	}
 	if key == nil {
-		return errors.ERR_BAD_DATA
+		return user, errors.ERR_BAD_DATA
 	}
 	row := d.db.QueryRow("SELECT userid.keys, users.name, users.email , users.created, users.edited, users.deleted FROM keys INNER JOIN users ON users.userid = keys.userid", key) // что делает и что выводит ?
 	var answer string
 	err = row.Scan(&answer, &user.Name, &user.Email, &user.Created, &user.Edited, &user.Deleted)
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithError(err).
 			WithField("key", key).
@@ -817,29 +988,32 @@ func (d *DB) CheckPermissions(ctx context.Context, userid IDT, repoid IDT, branc
 		return false, err
 	}
 	if userid == uuid.Nil || repoid == uuid.Nil {
-		return errors.ERR_BAD_DATA
+		return false, errors.ERR_BAD_DATA
 	}
-	row, err := d.db.Query("SELECT roleid FROM roles WHERE userid = ? AND WHERE repoid = ? AND WHERE branch = ?", userid.String(), repoid.String(), branch)
+
+	// No branch matching - just check if the user has any role for the repo
+	query := "SELECT COUNT(*) FROM roles WHERE user_id = ? AND rep_id = ?"
+	args := []interface{}{userid.String(), repoid.String()}
+
+	// Add branch condition if provided
+	if branch != "" {
+		query += " AND branch = ?"
+		args = append(args, branch)
+	}
+
+	var count int
+	err := d.db.QueryRow(query, args...).Scan(&count)
+
 	if err != nil {
-		log.
+		dbLogger.
 			WithContext(ctx).
 			WithError(err).
-			WithField("user_id ", userid).
-			WithField("repo_id ", repoid).
-			Warn("error check permitions")
+			WithField("user_id", userid).
+			WithField("repo_id", repoid).
+			Warn("error check permissions")
 		return false, err
 	}
-	var roleid string
-	err = row.Scan(&roleid)
-	if err != nil {
-		log.
-			WithContext(ctx).
-			WithError(err).
-			WithField("user_id ", userid).
-			WithField("repo_id ", repoid).
-			Warn("error check permitions")
-		return false, err
-	}
-	logrus.Trace("get info permitions user ", userid)
-	return true, err
+
+	// If we found any roles, the user has permission
+	return count > 0, nil
 }
