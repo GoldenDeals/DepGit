@@ -3,22 +3,15 @@
 package main
 
 import (
-	"bufio"
-	"context"
 	"os"
-	"os/signal"
-	"strings"
-	"sync"
-	"syscall"
+	"path/filepath"
 
-	"github.com/GoldenDeals/DepGit/internal/git"
+	"github.com/GoldenDeals/DepGit/internal/config"
+	"github.com/GoldenDeals/DepGit/internal/database"
 	"github.com/GoldenDeals/DepGit/internal/share/logger"
-	"github.com/GoldenDeals/DepGit/internal/stroage"
-	"github.com/GoldenDeals/DepGit/internal/web"
-	"github.com/joho/godotenv"
 )
 
-var mainLogger = logger.New("main")
+var log = logger.New("main")
 
 func main() {
 	// Load configuration from .env file and environment variables
@@ -30,25 +23,25 @@ func main() {
 	// Create necessary directories
 	dbDir := filepath.Dir(cfg.GetDatabasePath())
 	if err := os.MkdirAll(dbDir, 0755); err != nil {
-		mainLogger.Fatalf("Failed to create database directory: %v", err)
+		log.Fatalf("Failed to create database directory: %v", err)
 	}
 
 	// Create migrations directory if specified
 	if cfg.DB.MigrationsPath != "" {
 		if err := os.MkdirAll(cfg.DB.MigrationsPath, 0755); err != nil {
-			mainLogger.Fatalf("Failed to create migrations directory: %v", err)
+			log.Fatalf("Failed to create migrations directory: %v", err)
 		}
 	}
 
 	// Initialize the database
-	mainLogger.Info("Initializing database...")
+	log.Info("Initializing database...")
 	db := &database.DB{}
 	if err := db.Init(cfg); err != nil {
-		mainLogger.Fatalf("Failed to initialize database: %v", err)
+		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer db.Close()
 
-	mainLogger.Info("DepGit server starting")
+	log.Info("DepGit server starting")
 	// TODO: Add server initialization and other startup logic here
 
 	// Keep the server running
