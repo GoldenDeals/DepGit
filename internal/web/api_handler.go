@@ -3,6 +3,8 @@ package web
 
 import (
 	"database/sql"
+	"errors"
+	"math"
 	"net/http"
 	"time"
 
@@ -43,7 +45,7 @@ func (h *APIHandler) GetUsers(ctx echo.Context, params api.GetUsersParams) error
 	// Convert database users to API users
 	apiUsers := make([]api.User, 0, len(users))
 	for _, user := range users {
-		apiUser := dbUserToAPIUser(user)
+		apiUser := dbUserToAPIUser(&user)
 
 		// Filter by role if specified
 		if params.Role != nil {
@@ -82,7 +84,8 @@ func (h *APIHandler) CreateUser(ctx echo.Context) error {
 
 	// Set role if provided
 	if reqUser.Role != nil {
-		// TODO: Store role in database
+		// TODO: Future implementation will handle role assignment
+		webLogger.Debug("Role provided but not implemented yet")
 	}
 
 	// Save user to database
@@ -96,7 +99,7 @@ func (h *APIHandler) CreateUser(ctx echo.Context) error {
 	}
 
 	// Convert to API user and return
-	apiUser := dbUserToAPIUser(dbUser)
+	apiUser := dbUserToAPIUser(&dbUser)
 	return ctx.JSON(http.StatusCreated, apiUser)
 }
 
@@ -108,7 +111,7 @@ func (h *APIHandler) GetUser(ctx echo.Context, userId openapi_types.UUID) error 
 	// Get user from database
 	user, err := h.db.GetUser(ctx.Request().Context(), dbID)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return ctx.JSON(http.StatusNotFound, api.Error{
 				Code:    intPtr(http.StatusNotFound),
 				Message: strPtr("User not found"),
@@ -122,7 +125,7 @@ func (h *APIHandler) GetUser(ctx echo.Context, userId openapi_types.UUID) error 
 	}
 
 	// Convert to API user and return
-	apiUser := dbUserToAPIUser(user)
+	apiUser := dbUserToAPIUser(&user)
 	return ctx.JSON(http.StatusOK, apiUser)
 }
 
@@ -143,7 +146,7 @@ func (h *APIHandler) UpdateUser(ctx echo.Context, userId openapi_types.UUID) err
 	// Get existing user
 	existingUser, err := h.db.GetUser(ctx.Request().Context(), dbID)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return ctx.JSON(http.StatusNotFound, api.Error{
 				Code:    intPtr(http.StatusNotFound),
 				Message: strPtr("User not found"),
@@ -166,7 +169,8 @@ func (h *APIHandler) UpdateUser(ctx echo.Context, userId openapi_types.UUID) err
 
 	// Update role if provided
 	if reqUser.Role != nil {
-		// TODO: Store role in database
+		// TODO: Future implementation will handle role updates
+		webLogger.Debug("Role update provided but not implemented yet")
 	}
 
 	// Set updated time
@@ -183,7 +187,7 @@ func (h *APIHandler) UpdateUser(ctx echo.Context, userId openapi_types.UUID) err
 	}
 
 	// Convert to API user and return
-	apiUser := dbUserToAPIUser(existingUser)
+	apiUser := dbUserToAPIUser(&existingUser)
 	return ctx.JSON(http.StatusOK, apiUser)
 }
 
@@ -195,7 +199,7 @@ func (h *APIHandler) DeleteUser(ctx echo.Context, userId openapi_types.UUID) err
 	// Delete user from database
 	err := h.db.DeleteUser(ctx.Request().Context(), dbID)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return ctx.JSON(http.StatusNotFound, api.Error{
 				Code:    intPtr(http.StatusNotFound),
 				Message: strPtr("User not found"),
@@ -219,7 +223,7 @@ func (h *APIHandler) GetSshKeys(ctx echo.Context, userId openapi_types.UUID) err
 	// Check if user exists
 	_, err := h.db.GetUser(ctx.Request().Context(), dbID)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return ctx.JSON(http.StatusNotFound, api.Error{
 				Code:    intPtr(http.StatusNotFound),
 				Message: strPtr("User not found"),
@@ -238,8 +242,8 @@ func (h *APIHandler) GetSshKeys(ctx echo.Context, userId openapi_types.UUID) err
 
 	// Convert database keys to API keys
 	apiKeys := make([]api.SshKey, 0, len(keys))
-	for _, key := range keys {
-		apiKeys = append(apiKeys, dbSshKeyToAPISshKey(key))
+	for i := range keys {
+		apiKeys = append(apiKeys, dbSshKeyToAPISshKey(&keys[i]))
 	}
 
 	return ctx.JSON(http.StatusOK, apiKeys)
@@ -262,7 +266,7 @@ func (h *APIHandler) AddSshKey(ctx echo.Context, userId openapi_types.UUID) erro
 	// Check if user exists
 	_, err := h.db.GetUser(ctx.Request().Context(), dbID)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return ctx.JSON(http.StatusNotFound, api.Error{
 				Code:    intPtr(http.StatusNotFound),
 				Message: strPtr("User not found"),
@@ -302,7 +306,7 @@ func (h *APIHandler) AddSshKey(ctx echo.Context, userId openapi_types.UUID) erro
 	}
 
 	// Convert to API key and return
-	apiKey := dbSshKeyToAPISshKey(dbKey)
+	apiKey := dbSshKeyToAPISshKey(&dbKey)
 	return ctx.JSON(http.StatusCreated, apiKey)
 }
 
@@ -314,7 +318,7 @@ func (h *APIHandler) DeleteSshKey(ctx echo.Context, keyId openapi_types.UUID) er
 	// Delete SSH key from database
 	err := h.db.DeleteSshKey(ctx.Request().Context(), dbID)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return ctx.JSON(http.StatusNotFound, api.Error{
 				Code:    intPtr(http.StatusNotFound),
 				Message: strPtr("SSH key not found"),
@@ -332,7 +336,7 @@ func (h *APIHandler) DeleteSshKey(ctx echo.Context, keyId openapi_types.UUID) er
 
 // Helper functions for converting between database and API models
 
-func dbUserToAPIUser(dbUser database.User) api.User {
+func dbUserToAPIUser(dbUser *database.User) api.User {
 	// UUID is already a valid UUID object
 	id := dbUser.ID
 	email := openapi_types.Email(dbUser.Email)
@@ -350,7 +354,7 @@ func dbUserToAPIUser(dbUser database.User) api.User {
 	}
 }
 
-func dbSshKeyToAPISshKey(dbKey database.SshKey) api.SshKey {
+func dbSshKeyToAPISshKey(dbKey *database.SshKey) api.SshKey {
 	// UUIDs are already valid UUID objects
 	id := dbKey.ID
 	userId := dbKey.UserID
@@ -373,7 +377,15 @@ func strPtr(s string) *string {
 }
 
 func intPtr(i int) *int32 {
-	i32 := int32(i)
+	var i32 int32
+	switch {
+	case i > math.MaxInt32:
+		i32 = math.MaxInt32
+	case i < math.MinInt32:
+		i32 = math.MinInt32
+	default:
+		i32 = int32(i)
+	}
 	return &i32
 }
 

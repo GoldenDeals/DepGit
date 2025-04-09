@@ -1,14 +1,6 @@
-version: "2"
-
 run:
   timeout: 3m
   tests: false    # Disable linting test files
-  skip-dirs:      # Exclude common directories
-    - vendor
-    - .git
-  skip-files:     # Exclude generated files
-    - ".*\\.pb\\.go$"
-    - ".*\\.gen\\.go$"
   allow-parallel-runners: true  # Allow running linters in parallel
 
 linters:
@@ -83,6 +75,12 @@ linters-settings:
 issues:
   max-issues-per-linter: 0
   max-same-issues: 10
+  exclude-files:     # Moved from run.skip-files
+    - ".*\\.pb\\.go$"
+    - ".*\\.gen\\.go$"
+  exclude-dirs:      # Moved from run.skip-dirs
+    - vendor
+    - .git
   exclude-rules:
     - path: _test\.go
       linters:
@@ -95,10 +93,11 @@ issues:
       linters:
         - lll
   exclude-use-default: true
+  uniq-by-line: true
 
 output:
-  format: colored-line-number
+  formats:
+    - format: colored-line-number  # Updated from deprecated format
   print-issued-lines: true
   print-linter-name: true
-  uniq-by-line: true
   sort-results: true

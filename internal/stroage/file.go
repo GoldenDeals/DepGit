@@ -17,7 +17,7 @@ type FileStorage struct {
 // NewFileStorage creates a new file storage client
 func NewFileStorage(basePath string) (*FileStorage, error) {
 	// Create base directory if it doesn't exist
-	if err := os.MkdirAll(basePath, 0750); err != nil {
+	if err := os.MkdirAll(basePath, 0o750); err != nil {
 		return nil, err
 	}
 
@@ -27,10 +27,10 @@ func NewFileStorage(basePath string) (*FileStorage, error) {
 }
 
 // Put stores an object in the filesystem
-func (s *FileStorage) Put(_ context.Context, namespace string, objname string, obj io.Reader) error {
+func (s *FileStorage) Put(_ context.Context, namespace, objname string, obj io.Reader) error {
 	// Create directory for namespace if it doesn't exist
 	dir := filepath.Join(s.basePath, namespace)
-	if err := os.MkdirAll(dir, 0750); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
 
@@ -42,7 +42,7 @@ func (s *FileStorage) Put(_ context.Context, namespace string, objname string, o
 
 	// Create parent directories for the file if needed
 	fileDir := filepath.Dir(filePath)
-	if err := os.MkdirAll(fileDir, 0750); err != nil {
+	if err := os.MkdirAll(fileDir, 0o750); err != nil {
 		return err
 	}
 
@@ -66,7 +66,7 @@ func (s *FileStorage) Put(_ context.Context, namespace string, objname string, o
 }
 
 // Get retrieves an object from the filesystem
-func (s *FileStorage) Get(_ context.Context, namespace string, objname string) (io.Reader, error) {
+func (s *FileStorage) Get(_ context.Context, namespace, objname string) (io.Reader, error) {
 	filePath := filepath.Join(s.basePath, namespace, objname)
 	return os.Open(filePath)
 }

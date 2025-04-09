@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -45,11 +46,21 @@ func Load() (*Configuration, error) {
 	v.AutomaticEnv()
 
 	// Explicitly bind environment variables to their config keys
-	v.BindEnv("db.path", "DEPGIT_DB_PATH")
-	v.BindEnv("db.migrations_path", "DEPGIT_MIGRATIONS_PATH")
-	v.BindEnv("db.initial_migration", "DEPGIT_INITIAL_MIGRATION")
-	v.BindEnv("ssh.address", "DEPGIT_SSH_GIT_ADDRESS")
-	v.BindEnv("ssh.hostkey", "DEPGIT_SSH_GIT_HOSTKEY")
+	if err := v.BindEnv("db.path", "DEPGIT_DB_PATH"); err != nil {
+		return nil, fmt.Errorf("error binding environment variable: %w", err)
+	}
+	if err := v.BindEnv("db.migrations_path", "DEPGIT_MIGRATIONS_PATH"); err != nil {
+		return nil, fmt.Errorf("error binding environment variable: %w", err)
+	}
+	if err := v.BindEnv("db.initial_migration", "DEPGIT_INITIAL_MIGRATION"); err != nil {
+		return nil, fmt.Errorf("error binding environment variable: %w", err)
+	}
+	if err := v.BindEnv("ssh.address", "DEPGIT_SSH_GIT_ADDRESS"); err != nil {
+		return nil, fmt.Errorf("error binding environment variable: %w", err)
+	}
+	if err := v.BindEnv("ssh.hostkey", "DEPGIT_SSH_GIT_HOSTKEY"); err != nil {
+		return nil, fmt.Errorf("error binding environment variable: %w", err)
+	}
 
 	// Map old env vars to new structure for backward compatibility
 	if path := os.Getenv("DEPGIT_DB_PATH"); path != "" {
@@ -76,7 +87,8 @@ func Load() (*Configuration, error) {
 
 	// Read the config file, but don't error if it doesn't exist
 	if err := v.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+		var configFileNotFound viper.ConfigFileNotFoundError
+		if !errors.As(err, &configFileNotFound) {
 			return nil, fmt.Errorf("error reading config file: %w", err)
 		}
 	}
@@ -88,7 +100,7 @@ func Load() (*Configuration, error) {
 
 	// Create database directory if necessary
 	dbDir := filepath.Dir(config.DB.Path)
-	if err := os.MkdirAll(dbDir, 0755); err != nil {
+	if err := os.MkdirAll(dbDir, 0o755); err != nil {
 		return nil, fmt.Errorf("error creating database directory: %w", err)
 	}
 

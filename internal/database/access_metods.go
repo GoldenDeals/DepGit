@@ -177,7 +177,9 @@ func (d *DB) CreateUser(ctx context.Context, user *User) error {
 	userid := user.ID.String()
 	var n int
 	row := d.db.QueryRow("SELECT COUNT(id) FROM users WHERE id = ?", userid)
-	row.Scan(&n)
+	if err := row.Scan(&n); err != nil {
+		return err
+	}
 	if n > 0 {
 		return errors.ErrAlreadyExists
 	}
@@ -247,8 +249,7 @@ func (d *DB) DeleteUser(ctx context.Context, userid IDT) error {
 
 	var n int
 	row := d.db.QueryRow("SELECT COUNT(id) FROM users WHERE id = ?", userid)
-	err := row.Scan(&n)
-	if err != nil {
+	if err := row.Scan(&n); err != nil {
 		dbLogger.WithContext(ctx).WithError(err).Warn("error checking user existence")
 		return err
 	}
@@ -289,8 +290,7 @@ func (d *DB) GetUser(ctx context.Context, userid IDT) (User, error) {
 	}
 	var n int
 	row := d.db.QueryRow("SELECT COUNT(id) FROM users WHERE id = ?", userid)
-	err := row.Scan(&n)
-	if err != nil {
+	if err := row.Scan(&n); err != nil {
 		dbLogger.WithContext(ctx).WithError(err).Warn("error checking user existence")
 		return user, err
 	}
@@ -301,7 +301,7 @@ func (d *DB) GetUser(ctx context.Context, userid IDT) (User, error) {
 
 	row = d.db.QueryRow("SELECT id, name, email, created, edited, deleted FROM users WHERE id = ?", userid)
 	var idStr string
-	err = row.Scan(&idStr, &user.Name, &user.Email, &user.Created, &user.Edited, &user.Deleted)
+	err := row.Scan(&idStr, &user.Name, &user.Email, &user.Created, &user.Edited, &user.Deleted)
 	if err != nil {
 		dbLogger.
 			WithContext(ctx).
@@ -454,7 +454,14 @@ func (d *DB) DeleteSshKey(ctx context.Context, keyid IDT) error {
 
 	row := d.db.QueryRow("SELECT COUNT(id) FROM  keys  WHERE id = ?", keyid)
 	var n int
-	row.Scan(&n)
+	if err := row.Scan(&n); err != nil {
+		dbLogger.
+			WithContext(ctx).
+			WithField("key_id", keyid).
+			WithError(err).
+			Warn("error checking ssh key existence")
+		return err
+	}
 	if n == 0 {
 		return errors.ErrNotFound
 	}
@@ -628,7 +635,7 @@ func (d *DB) DeleteRepo(ctx context.Context, repoid IDT) error {
 	return nil
 }
 
-func (d *DB) UpdateRepo(ctx context.Context, repoid IDT, repo Repo) error {
+func (d *DB) UpdateRepo(ctx context.Context, repoid IDT, repo *Repo) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -1036,7 +1043,7 @@ func (d *DB) UserByKey(ctx context.Context, key []byte) (User, error) {
 	return user, nil
 }
 
-func (d *DB) CheckPermissions(ctx context.Context, userid IDT, repoid IDT, branch string) (bool, error) {
+func (d *DB) CheckPermissions(ctx context.Context, userid, repoid IDT, branch string) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}

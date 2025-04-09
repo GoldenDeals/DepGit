@@ -48,7 +48,7 @@ func NewMinioStorage(endpoint, accessKeyID, secretAccessKey, bucketName string, 
 }
 
 // Put stores an object in Minio
-func (s *MinioStorage) Put(ctx context.Context, namespace string, objname string, obj io.Reader) error {
+func (s *MinioStorage) Put(ctx context.Context, namespace, objname string, obj io.Reader) error {
 	// Combine namespace and objname to create the object key
 	objectKey := namespace + "/" + objname
 
@@ -66,7 +66,7 @@ func (s *MinioStorage) Put(ctx context.Context, namespace string, objname string
 }
 
 // Get retrieves an object from Minio
-func (s *MinioStorage) Get(ctx context.Context, namespace string, objname string) (io.Reader, error) {
+func (s *MinioStorage) Get(ctx context.Context, namespace, objname string) (io.Reader, error) {
 	// Combine namespace and objname to create the object key
 	objectKey := namespace + "/" + objname
 

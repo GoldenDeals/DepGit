@@ -22,13 +22,13 @@ func main() {
 
 	// Create necessary directories
 	dbDir := filepath.Dir(cfg.GetDatabasePath())
-	if err := os.MkdirAll(dbDir, 0755); err != nil {
+	if err := os.MkdirAll(dbDir, 0o755); err != nil {
 		log.Fatalf("Failed to create database directory: %v", err)
 	}
 
 	// Create migrations directory if specified
 	if cfg.DB.MigrationsPath != "" {
-		if err := os.MkdirAll(cfg.DB.MigrationsPath, 0755); err != nil {
+		if err := os.MkdirAll(cfg.DB.MigrationsPath, 0o755); err != nil {
 			log.Fatalf("Failed to create migrations directory: %v", err)
 		}
 	}

@@ -368,7 +368,7 @@ func TestUpdateRepo(t *testing.T) {
 
 	// Update the repository
 	repo.Name = "updated-repo-name"
-	err = db.UpdateRepo(ctx, repo.ID, repo)
+	err = db.UpdateRepo(ctx, repo.ID, &repo)
 	assert.Nil(err)
 
 	// Get the repository and verify the changes

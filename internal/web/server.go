@@ -3,6 +3,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -68,7 +69,7 @@ func (s *Server) setupRoutes() {
 func (s *Server) Start(ctx context.Context) error {
 	// Start server in a goroutine
 	go func() {
-		if err := s.echo.Start(s.config.Address); err != nil && err != http.ErrServerClosed {
+		if err := s.echo.Start(s.config.Address); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverLogger.WithError(err).Fatal("Failed to start web server")
 		}
 	}()
@@ -77,7 +78,7 @@ func (s *Server) Start(ctx context.Context) error {
 	<-ctx.Done()
 
 	// Graceful shutdown
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	return s.echo.Shutdown(shutdownCtx)
