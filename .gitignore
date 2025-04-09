@@ -1,0 +1,110 @@
+# Binaries and build artifacts
+/build/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go specific
+/vendor/
+/go.work
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Air live reload
+/tmp/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Log files
+*.log
+/logs/
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Node.js and web-related files
+/web/node_modules/
+/node_modules/
+.npm
+.yarn
+.pnp.*
+yarn-debug.log*
+yarn-error.log*
+npm-debug.log*
+lerna-debug.log*
+.eslintcache
+.stylelintcache
+
+# Build output
+/dist/
+/web/dist/
+/web/build/
+.svelte-kit/
+.output/
+.vercel/
+.netlify/
+
+# Browser-related files
+.cache/
+.parcel-cache/
+.vite/
+
+# Svelte specific
+/web/.svelte-kit/
+/web/package/
+.env*.local
+
+# Frontend build artifacts
+/web/.routify/
+/web/__sapper__/
+/web/static/__index.html
+/web/static/service-worker.js
+/web/static/service-worker.js.map
+
+# TypeScript specific
+*.tsbuildinfo
+.tscache/
+
+# Testing
+/web/coverage/
+/web/cypress/videos/
+/web/cypress/screenshots/
+
+# Editor directories and files
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Generated files
+/gen/
+
+/storage/
+
+# Test coverage
+/coverage/
+coverage.txt
+coverage.html
+
+*.key
+*.pub

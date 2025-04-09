@@ -1,3 +1,5 @@
+// Package database provides database access methods and types for managing
+// users, repositories, SSH keys, and access roles in the DepGit system.
 package database
 
 import (
@@ -23,7 +25,7 @@ const (
 	RSA_SHA2_512
 	SSH_RSA
 	ECDSA_SHA2_NISTP256
-	// .... TODO: Добавить еще
+	// .... TODO: Add more
 )
 
 // Logger for database access
@@ -88,6 +90,11 @@ type DB struct {
 	db               *sql.DB
 	migrationManager *migrations.Manager
 	config           *config.Configuration
+}
+
+// DB returns the underlying database connection
+func (d *DB) DB() *sql.DB {
+	return d.db
 }
 
 func (d *DB) Close() error {
@@ -216,7 +223,7 @@ func (d *DB) EditUser(ctx context.Context, userid IDT, user *User) error {
 			Warn("error edit user")
 		return err
 	}
-	_, err = statement.Exec(user.Name, user.Email, user.Created.Format(time.DateTime), time.Now().Format(time.DateTime), user.Deleted.Format(time.DateTime), userid.String())
+	_, err = statement.Exec(user.Name, user.Email, user.Created.Format(time.DateTime), time.Now().Format(time.DateTime), nil, userid.String())
 	if err != nil {
 		dbLogger.
 			WithContext(ctx).
@@ -259,7 +266,7 @@ func (d *DB) DeleteUser(ctx context.Context, userid IDT) error {
 			Warn("error delete user")
 		return err
 	}
-	_, err = statement.Exec(userid)
+	_, err = statement.Exec(time.Now().Format(time.DateTime), userid.String())
 	if err != nil {
 		dbLogger.
 			WithContext(ctx).
@@ -324,12 +331,10 @@ func (d *DB) GetUsers(ctx context.Context) ([]User, error) {
 		return users, err
 	}
 
-	rows, err := d.db.Query("SELECT id, name, email, created, edited, deleted FROM users")
+	// Fixed typo in SQL query (FORM -> FROM) and added WHERE clause for non-deleted users
+	rows, err := d.db.Query("SELECT id, name, email, created_at, updated_at, deleted_at FROM users WHERE deleted_at IS NULL")
 	if err != nil {
-		dbLogger.
-			WithContext(ctx).
-			WithError(err).
-			Warn("error fetching users")
+		log.Errorf("Error getting users: %v", err)
 		return users, err
 	}
 	defer rows.Close()
@@ -355,9 +360,20 @@ func (d *DB) GetUsers(ctx context.Context) ([]User, error) {
 				Warn("error parsing user id")
 			return users, err
 		}
+	
+		// Set timestamps
+		if createdAt.Valid {
+			user.Created = createdAt.Time
+		}
+		if updatedAt.Valid {
+			user.Edited = updatedAt.Time
+		}
+		if deletedAt.Valid {
+			user.Deleted = deletedAt.Time
+		}
 
 		users = append(users, user)
-		logrus.Trace("get info about user", user.ID, user.Name)
+		logrus.Trace("Got info about user", user.ID, user.Name)
 	}
 
 	if err = rows.Err(); err != nil {
@@ -385,6 +401,7 @@ func (d *DB) AddSshKey(ctx context.Context, userid IDT, key *SshKey) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+<<<<<<< HEAD
 	// Set the UserID to the provided userid
 	key.UserID = userid
 
@@ -412,27 +429,59 @@ func (d *DB) AddSshKey(ctx context.Context, userid IDT, key *SshKey) error {
 			WithField("key", key.ID).
 			WithError(err).
 			Warn("error add ssh key")
+=======
+
+	// Validate key data
+	if key == nil || key.ID == uuid.Nil {
+		return errors.New("Invalid SSH key data")
+	}
+
+	// Prepare SQL statement
+	statement, err := d.db.Prepare("INSERT INTO keys (id, user_id, name, type, key, created_at, deleted_at) VALUES (?,?,?,?,?,?,?)")
+	if err != nil {
+		log.Errorf("Error preparing AddSshKey statement: %v", err)
+>>>>>>> ivan/proto-stroage
 		return err
 	}
-	_, err = statement.Exec(key.ID.String(), key.UserID.String(), key.Name, key.Type, key.Data, time.Now().Format(time.DateTime), key.Deleted.Format(time.DateTime))
+
+	// Execute SQL statement
+	_, err = statement.Exec(
+		key.ID.String(),
+		key.UserID.String(),
+		key.Name,
+		key.Type,
+		key.Data,
+		key.Created.Format(time.DateTime),
+		nil) // No deletion date for new key
+
 	if err != nil {
+<<<<<<< HEAD
 		dbLogger.
 			WithContext(ctx).
 			WithField("user_id", userid).
 			WithField("key", key.ID).
 			WithError(err).
 			Warn("error add ssh key")
+=======
+		log.Errorf("Error executing AddSshKey SQL: %v", err)
+>>>>>>> ivan/proto-stroage
 		return err
 	}
-	logrus.Trace("Add SSH KEY", key, userid)
+
+	log.Debugf("Added SSH key %s for user %s", key.ID, userid)
 	return nil
 }
 
+<<<<<<< HEAD
 func (d *DB) DeleteSshKey(ctx context.Context, keyid IDT) error {
+=======
+func (d *DB) DeleteSshKey(ctx context.Context, keyID IDT) error {
+>>>>>>> ivan/proto-stroage
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
+<<<<<<< HEAD
 	row := d.db.QueryRow("SELECT COUNT(id) FROM  keys  WHERE id = ?", keyid)
 	var n int
 	row.Scan(&n)
@@ -458,14 +507,32 @@ func (d *DB) DeleteSshKey(ctx context.Context, keyid IDT) error {
 		return err
 	}
 	logrus.Trace("Delete SSH key ", keyid)
+=======
+	// Soft delete - update deleted_at timestamp instead of actually deleting
+	statement, err := d.db.Prepare("UPDATE keys SET deleted_at = ? WHERE id = ?")
+	if err != nil {
+		log.Errorf("Error preparing DeleteSshKey statement: %v", err)
+		return err
+	}
+
+	// Execute SQL statement
+	_, err = statement.Exec(time.Now().Format(time.DateTime), keyID.String())
+	if err != nil {
+		log.Errorf("Error executing DeleteSshKey SQL: %v", err)
+		return err
+	}
+
+	log.Debugf("Deleted SSH key %s", keyID)
+>>>>>>> ivan/proto-stroage
 	return nil
 }
 
-func (d *DB) GetSshKeys(ctx context.Context, userid IDT) ([]SshKey, error) {
+func (d *DB) GetSshKeys(ctx context.Context, userID IDT) ([]SshKey, error) {
 	keys := make([]SshKey, 0, 16)
 	if err := ctx.Err(); err != nil {
 		return keys, err
 	}
+<<<<<<< HEAD
 	if userid == uuid.Nil {
 		return keys, errors.ERR_BAD_DATA
 	}
@@ -482,25 +549,66 @@ func (d *DB) GetSshKeys(ctx context.Context, userid IDT) ([]SshKey, error) {
 			WithField("user_id", userid).
 			WithError(err).
 			Warn("error get ssh key")
+=======
+
+	// Query SSH keys for the user that are not deleted
+	rows, err := d.db.Query("SELECT id, user_id, name, type, key, created_at, deleted_at FROM keys WHERE user_id = ? AND deleted_at IS NULL", userID.String())
+	if err != nil {
+		log.Errorf("Error querying SSH keys for user %s: %v", userID, err)
+>>>>>>> ivan/proto-stroage
 		return keys, err
 	}
-	for row.Next() {
+	defer rows.Close()
+
+	for rows.Next() {
 		var key SshKey
-		err = row.Scan(&key.ID, &key.UserID, &key.Name, &key.Type, &key.Data, &key.Created, &key.Deleted)
+		var id, userId string
+		var createdAt, deletedAt sql.NullTime
+
+		// Scan row into variables
+		err = rows.Scan(&id, &userId, &key.Name, &key.Type, &key.Data, &createdAt, &deletedAt)
 		if err != nil {
+<<<<<<< HEAD
 			dbLogger.
 				WithContext(ctx).
 				WithField("user_id", userid).
 				WithError(err).
 				Warn("error get ssh key")
+=======
+			log.Errorf("Error scanning SSH key row: %v", err)
+>>>>>>> ivan/proto-stroage
 			return keys, err
 		}
+
+		// Parse UUIDs
+		key.ID, err = uuid.Parse(id)
+		if err != nil {
+			log.Errorf("Error parsing SSH key ID: %v", err)
+			return keys, err
+		}
+
+		key.UserID, err = uuid.Parse(userId)
+		if err != nil {
+			log.Errorf("Error parsing SSH key user ID: %v", err)
+			return keys, err
+		}
+
+		// Set timestamps
+		if createdAt.Valid {
+			key.Created = createdAt.Time
+		}
+		if deletedAt.Valid {
+			key.Deleted = deletedAt.Time
+		}
+
 		keys = append(keys, key)
 	}
-	logrus.Trace("Get SSH keys user ", userid)
+
+	log.Debugf("Retrieved %d SSH keys for user %s", len(keys), userID)
 	return keys, nil
 }
 
+<<<<<<< HEAD
 func NewRepo(name string) Repo {
 	return Repo{
 		ID:   uuid.New(),
@@ -1017,3 +1125,268 @@ func (d *DB) CheckPermissions(ctx context.Context, userid IDT, repoid IDT, branc
 	// If we found any roles, the user has permission
 	return count > 0, nil
 }
+=======
+// func (d *DB) CreateRepo(ctx context.Context, repo *Repo) error {
+// 	if err := ctx.Err(); err != nil {
+// 		return err
+// 	}
+// 	statement, err := d.db.Prepare("INSERT INTO permitions (id, name, created, edited ,deleted) VALUES (?, ?,?, ?, ?)")
+// 	if err != nil {
+// 		log.Errorf("Error Create Repo ", repo.ID, err)
+// 		return err
+// 	}
+// 	repoid := uuid.New().String()
+// 	_, err = statement.Exec(repoid, repo.Name, time.Now().Format(time.DateTime), repo.Edited, repo.Deleted.Format(time.DateTime))
+// 	if err != nil {
+// 		log.Errorf("Error Execute sql request ", err) //
+// 		return err
+// 	}
+// 	logrus.Trace("Create Repositor", repo.ID)
+// 	return nil
+// }
+
+// func (d *DB) DeleteRepo(ctx context.Context, repoid IDT) error {
+// 	if err := ctx.Err(); err != nil {
+// 		return err
+// 	}
+// 	statement, err := d.db.Prepare("DELETE * FORM permitions WHERE id = ?")
+// 	if err != nil {
+// 		log.Errorf("Error DeleteRepo ", repoid, err)
+// 		return err
+// 	}
+// 	_, err = statement.Exec(repoid)
+// 	if err != nil {
+// 		log.Errorf("Error Execute sql request ", err) //
+// 		return err
+// 	}
+// 	logrus.Trace("Deleted.Format(time.DateTime) Repositor", repoid)
+// 	return nil
+// }
+
+// func (d *DB) UpdateRepo(ctx context.Context, repoid IDT, repo Repo) error {
+// 	if err := ctx.Err(); err != nil {
+// 		return err
+// 	}
+// 	statement, err := d.db.Prepare("UPDATE permitions SET name = ? , created = ?, deleted = ? WHERE id = ?")
+// 	if err != nil {
+// 		log.Errorf("Error UpdateRepo ", repoid, err)
+// 		return err
+// 	}
+// 	_, err = statement.Exec(repo.Name, repo.Created.Format(time.DateTime), repo.Deleted.Format(time.DateTime), repoid.String())
+// 	if err != nil {
+// 		log.Errorf("Error Execute sql request ", err) //
+// 		return err
+// 	}
+// 	logrus.Trace("Edit Repositor ", repo.ID)
+// 	return nil
+// }
+
+// func (d *DB) GetRepo(ctx context.Context, repoid IDT) (Repo, error) {
+// 	var repo Repo
+// 	if err := ctx.Err(); err != nil {
+// 		return repo, err
+// 	}
+// 	row, err := d.db.Query("SELECT * FORM permitions WHERE id = ?", repoid)
+// 	if err != nil {
+// 		log.Errorf("Error GetRepo ", repoid, err)
+// 		return repo, err
+// 	}
+// 	var identif string
+// 	var id IDT
+// 	err = row.Scan(&identif, &repo.Name, &repo.Created, &repo.Edited, &repo.Deleted)
+// 	if err != nil {
+// 		log.Errorf("Error scan sql request ", err) //
+// 		return repo, err
+// 	}
+// 	err = id.UnmarshalText([]byte(identif))
+// 	repo.ID = id
+// 	if err != nil {
+// 		log.Errorf("Error GetRepo scan", identif, repoid, err)
+// 		return repo, err
+// 	}
+// 	logrus.Trace("get info about Repositor ", repo.ID)
+// 	return repo, nil
+// }
+
+// func (d *DB) GetRepos(ctx context.Context) ([]Repo, error) {
+// 	var err error
+// 	repos := make([]Repo, 0, 16)
+// 	if err := ctx.Err(); err != nil {
+// 		return repos, err
+// 	}
+// 	row, err := d.db.Query("SELECT * FORM permitions ")
+// 	if err != nil {
+// 		log.Errorf("Error GetRepos ", err)
+// 		return repos, err
+// 	}
+// 	for row.Next() {
+// 		var repo Repo
+// 		var identif string
+// 		var id IDT
+// 		err = row.Scan(&identif, &repo.Name, &repo.Created, &repo.Deleted)
+// 		if err != nil {
+// 			log.Errorf("Error scan sql request ", err) //
+// 			return repos, err
+// 		}
+// 		err = id.UnmarshalText([]byte(identif))
+// 		repo.ID = id
+// 		if err != nil {
+// 			log.Errorf("Error GetRepos scan ", identif, err)
+// 			return repos, err
+// 		}
+// 		repos = append(repos, repo)
+// 		logrus.Trace("get info about Repositor", repo.ID)
+// 	}
+
+// 	return repos, nil
+// }
+
+// func (d *DB) CreateAccessRole(ctx context.Context, ar *AccessRole) error {
+// 	if err := ctx.Err(); err != nil {
+// 		return err
+// 	}
+// 	statement, err := d.db.Prepare("INSERT INTO roles (role_id ,user_id, rep_id , branch, created, deleted) VALUES (?,?, ?,?, ?, ?)")
+// 	if err != nil {
+// 		log.Errorf("Error CreateAccessRole ", ar.RepoID, ar.RepoID, ar.UserID, err)
+// 		return err
+// 	}
+// 	roleid := uuid.New().String()
+// 	_, err = statement.Exec(roleid, ar.UserID, ar.RepoID, ar.Branches, ar.Created.Format(time.DateTime), ar.Deleted.Format(time.DateTime))
+// 	if err != nil {
+// 		log.Errorf("Error Execute sql request ", err) //
+// 		return err
+// 	}
+// 	logrus.Trace("Create Repositor", ar)
+// 	return nil
+// }
+
+// func (d *DB) EditAccessRole(ctx context.Context, roleid IDT, ar *AccessRole) error {
+// 	if err := ctx.Err(); err != nil {
+// 		return err
+// 	}
+// 	statement, err := d.db.Prepare("UPDATE roles SET user_id = ?, rep_id = ?, branch = ?, created = ?, deleted = ? WHERE role_id = ?")
+// 	if err != nil {
+// 		log.Errorf("Error EditAccessRole ", roleid, err)
+// 		return err
+// 	}
+// 	_, err = statement.Exec(ar.UserID.String(), ar.RepoID.String(), ar.Branches, ar.Created.Format(time.DateTime), ar.Deleted.Format(time.DateTime), ar.RoleID.String())
+// 	if err != nil {
+// 		log.Errorf("Error Execute sql request ", err) //
+// 		return err
+// 	}
+// 	logrus.Trace("Edit role", ar.RoleID)
+// 	return nil
+// }
+
+// func (d *DB) DeleteAccessRole(ctx context.Context, roleid IDT) error {
+// 	statement, err := d.db.Prepare("DELETE * FORM roles WHERE role_id = ?")
+// 	if err != nil {
+// 		log.Errorf("Error DeleteAccessRole ", roleid, err)
+// 		return err
+// 	}
+// 	_, err = statement.Exec(roleid)
+// 	if err != nil {
+// 		log.Errorf("Error Execute sql request ", err) //
+// 		return err
+// 	}
+// 	logrus.Trace("Deleted.Format(time.DateTime) Role", roleid)
+// 	return nil
+// }
+
+// func (d *DB) GetAccessRole(ctx context.Context, roleid IDT) (AccessRole, error) {
+// 	var role AccessRole
+// 	var err error
+// 	row := d.db.QueryRow("SELECT * FORM roles WHERE id = ?", roleid)
+// 	if err != nil {
+// 		log.Errorf("Error GetAccessRoles ", roleid, err)
+// 		return role, err
+// 	}
+// 	var idrole, iduser, idrepo IDT
+// 	var identifRole, identifUser, identifReposit string
+// 	row.Scan(&identifRole, &identifUser, &identifReposit, &role.Branches, &role.Created, &role.Deleted)
+// 	err = idrole.UnmarshalText([]byte(identifRole))
+// 	if err != nil {
+// 		log.Errorf("Error UnmarshalText sql request ", err) //
+// 		return role, err
+// 	}
+// 	err = iduser.UnmarshalText([]byte(identifUser))
+// 	if err != nil {
+// 		log.Errorf("Error UnmarshalText sql request ", err) //
+// 		return role, err
+// 	}
+// 	err = idrepo.UnmarshalText([]byte(identifReposit))
+// 	if err != nil {
+// 		log.Errorf("Error GetAccessRoles scan ", identifRole, err)
+// 		return role, err
+// 	}
+// 	logrus.Trace("get info about Role ", role)
+// 	return role, nil
+// }
+
+// func (d *DB) GetAccessRoles(ctx context.Context) ([]AccessRole, error) {
+// 	var roles []AccessRole
+// 	row, err := d.db.Query("SELECT * FORM roles ")
+// 	if err != nil {
+// 		log.Errorf("Error GetAccessRoles ", err)
+// 		return roles, err
+// 	}
+// 	for row.Next() {
+// 		var idrole, iduser, idrepo IDT
+// 		var identifRole, identifUser, identifReposit string
+// 		var role AccessRole
+// 		row.Scan(&identifRole, &identifUser, &identifReposit, &role.Branches, &role.Created, &role.Deleted)
+// 		err = idrole.UnmarshalText([]byte(identifRole))
+// 		if err != nil {
+// 			log.Errorf("Error UnmarshalText sql request ", err) //
+// 			return roles, err
+// 		}
+// 		err = iduser.UnmarshalText([]byte(identifUser))
+// 		if err != nil {
+// 			log.Errorf("Error UnmarshalText sql request ", err) //
+// 			return roles, err
+// 		}
+// 		err = idrepo.UnmarshalText([]byte(identifReposit))
+// 		if err != nil {
+// 			log.Errorf("Error UnmarshalText sql request ", err) //
+// 			return roles, err
+// 		}
+// 		if err != nil {
+// 			log.Errorf("Error GetAccessRoles scan ", identifRole, err)
+// 			return roles, err
+// 		}
+// 		logrus.Trace("get info about Role ", role)
+// 		roles = append(roles, role)
+// 	}
+// 	return roles, nil
+// }
+
+// func (d *DB) UserByKey(ctx context.Context, key []byte) (User, error) {
+// 	var user User
+// 	var err error
+// 	row := d.db.QueryRow("SELECT userid.keys, users.name, users.email , users.created, users.edited, users.deleted FROM keys INNER JOIN users ON users.userid = keys.userid", key) // что делает и что выводит ?
+// 	var answer string
+// 	err = row.Scan(&answer, &user.Name, &user.Email, &user.Created, &user.Edited, &user.Deleted)
+// 	if err != nil {
+// 		log.Errorf("Error Scan sql request ", key, err)
+// 		return user, err
+// 	}
+// 	logrus.Trace("get info user keys ", user, key)
+// 	return user, nil
+// }
+
+// func (d *DB) CheckPermissions(ctx context.Context, userid IDT, repoid IDT, branch string) (bool, error) {
+// 	row, err := d.db.Query("SELECT roleid FROM roles WHERE userid = ? AND WHERE repoid = ? AND WHERE branch = ?", userid.String(), repoid.String(), branch)
+// 	if err != nil {
+// 		log.Errorf("Error CheckPermissions ", userid, repoid, branch, err)
+// 		return false, err
+// 	}
+// 	var roleid string
+// 	err = row.Scan(&roleid)
+// 	if err != nil {
+// 		log.Errorf("Error CheckPermissions scan", userid, repoid, branch, roleid, err)
+// 		return false, err
+// 	}
+// 	logrus.Trace("get info permitions user ", userid)
+// 	return true, err
+// }
+>>>>>>> ivan/proto-stroage

@@ -1,27 +1,104 @@
+version: "2"
+
 run:
   timeout: 3m
   tests: false    # Disable linting test files
   skip-dirs:      # Exclude common directories
     - vendor
     - .git
+  skip-files:     # Exclude generated files
+    - ".*\\.pb\\.go$"
+    - ".*\\.gen\\.go$"
+  allow-parallel-runners: true  # Allow running linters in parallel
 
 linters:
+  disable-all: true  # Disable all linters by default
   enable:
-    - govet      # Official Go analyzer (correctness)
-    - errcheck   # Ensure error handling
-    - staticcheck# Advanced static analysis
-    - gosec      # Security checks
-    - unused     # Find unused code
-    - ineffassign# Detect useless assignments
-    - gofmt      # Formatting checks
-    - typecheck  # Type verification
+    # Default linters
+    - errcheck     # Checks for unchecked errors
+    - govet        # Official Go analyzer 
+    - ineffassign  # Detect useless assignments
+    - staticcheck  # Static analysis checks
+    - unused       # Find unused code
+    
+    # Code quality
+    - revive       # Fast, configurable, extensible linter
+    - gocritic     # Provides diagnostics for bugs, performance and style issues
+    - bodyclose    # Checks whether HTTP response body is closed
+    - contextcheck # Check whether functions use a non-inherited context
+    - misspell     # Finds commonly misspelled English words
+    - whitespace   # Tool for detecting trailing whitespace
+        
+    # Security
+    - gosec        # Security checks
+    
+    # Performance
+    - prealloc     # Find slice preallocation opportunities
+    - unconvert    # Remove unnecessary type conversions
+    - unparam      # Find unused parameters
+    
+    # Bug detection
+    - nilnil       # Checks for simultaneous return of nil error and invalid value
+    - nilerr       # Finds code that returns nil even if error is not nil
+    - nilnesserr   # Reports constructs that check for err != nil but return nil error
+    - exhaustive   # Check exhaustiveness of enum switch statements
+    - errorlint    # Finds code with problems in error wrapping scheme
+    - nakedret     # Checks for naked returns in functions exceeding a certain length
 
 linters-settings:
   gosec:
     excludes:     # Disable some security checks prone to false positives
       - G107     # URL string concatenation check
       - G304     # Potential file inclusion via variable
+  revive:
+    rules:
+      - name: exported
+        disabled: false
+        severity: warning
+        arguments:
+          - checkPrivateReceivers
+          - disableStutteringCheck
+  gocyclo:
+    min-complexity: 15  # Default is 30
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+      - opinionated
+    disabled-checks:
+      - commentFormatting  # Sometimes too opinionated
+  errorlint:
+    errorf: true
+    asserts: true
+    comparison: true
+  goimports:
+    local-prefixes: github.com/GoldenDeals/DepGit  # Adjusted to project name
+  exhaustive:
+    check-generated: false
+    default-signifies-exhaustive: true
+  nakedret:
+    max-func-lines: 30
 
 issues:
-  exclude-use-default: false  # Don't use default excludes
-  max-same-issues: 10         # Limit duplicate issues
+  max-issues-per-linter: 0
+  max-same-issues: 10
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - gosec
+        - errcheck
+        - goconst
+    # Exclude go:generate comments from linting
+    - source: "^//go:generate "
+      linters:
+        - lll
+  exclude-use-default: true
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+  uniq-by-line: true
+  sort-results: true

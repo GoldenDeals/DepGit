@@ -1,13 +1,21 @@
+// Package main is the entry point for the DepGit application.
+// It initializes and runs the git server and web server with file storage capabilities.
 package main
 
 import (
-	"log"
+	"bufio"
+	"context"
 	"os"
-	"path/filepath"
+	"os/signal"
+	"strings"
+	"sync"
+	"syscall"
 
-	"github.com/GoldenDeals/DepGit/internal/config"
-	"github.com/GoldenDeals/DepGit/internal/database"
+	"github.com/GoldenDeals/DepGit/internal/git"
 	"github.com/GoldenDeals/DepGit/internal/share/logger"
+	"github.com/GoldenDeals/DepGit/internal/stroage"
+	"github.com/GoldenDeals/DepGit/internal/web"
+	"github.com/joho/godotenv"
 )
 
 var mainLogger = logger.New("main")
