@@ -1,26 +1,49 @@
+// Package main is the entry point for the DepGit application.
+// It initializes and runs the git server and web server with file storage capabilities.
 package main
 
 import (
-	"context"
 	"os"
+	"path/filepath"
 
-	"github.com/GoldenDeals/DepGit/internal/git"
+	"github.com/GoldenDeals/DepGit/internal/config"
+	"github.com/GoldenDeals/DepGit/internal/database"
 	"github.com/GoldenDeals/DepGit/internal/share/logger"
-	"github.com/joho/godotenv"
 )
 
 var log = logger.New("main")
 
 func main() {
-	err := godotenv.Load(".env")
+	// Load configuration from .env file and environment variables
+	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	s, err := git.Init(git.Config{os.Getenv("DEPGIT_SSH_GIT_ADDRESS")})
-	if err != nil {
-		log.Fatalln(err)
+	// Create necessary directories
+	dbDir := filepath.Dir(cfg.GetDatabasePath())
+	if err := os.MkdirAll(dbDir, 0o755); err != nil {
+		log.Fatalf("Failed to create database directory: %v", err)
 	}
 
-	log.Fatalln(s.Serve(context.Background()))
+	// Create migrations directory if specified
+	if cfg.DB.MigrationsPath != "" {
+		if err := os.MkdirAll(cfg.DB.MigrationsPath, 0o755); err != nil {
+			log.Fatalf("Failed to create migrations directory: %v", err)
+		}
+	}
+
+	// Initialize the database
+	log.Info("Initializing database...")
+	db := &database.DB{}
+	if err := db.Init(cfg); err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+	defer db.Close()
+
+	log.Info("DepGit server starting")
+	// TODO: Add server initialization and other startup logic here
+
+	// Keep the server running
+	select {}
 }

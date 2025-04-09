@@ -1,3 +1,5 @@
+// Package logger provides logging functionality for the application.
+// It wraps logrus to provide consistent logging with source information.
 package logger
 
 import (
@@ -14,6 +16,9 @@ func (l customLogger) Format(entry *logrus.Entry) ([]byte, error) {
 	return l.formatter.Format(entry)
 }
 
+// New creates a new logger instance with the given name and optional log level.
+// The name is used as a source identifier in log entries.
+// If no log level is provided, it defaults to TraceLevel.
 func New(name string, logLevel ...logrus.Level) *logrus.Logger {
 	log := logrus.New()
 	log.SetFormatter(customLogger{
@@ -23,7 +28,7 @@ func New(name string, logLevel ...logrus.Level) *logrus.Logger {
 	if len(logLevel) > 0 {
 		log.SetLevel(logLevel[0])
 	} else {
-		log.SetLevel(logrus.DebugLevel)
+		log.SetLevel(logrus.TraceLevel)
 	}
 
 	return log

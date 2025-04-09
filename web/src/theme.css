@@ -1,0 +1,87 @@
+/* Simple Theme Variables */
+
+/* Light theme by default */
+:root {
+  /* Primary colors */
+  --color-primary: #3b82f6; /* blue-500 */
+  --color-primary-hover: #2563eb; /* blue-600 */
+  --color-primary-light: #60a5fa; /* blue-400 */
+
+  /* Secondary colors */
+  --color-secondary: #8b5cf6; /* violet-500 */
+  --color-secondary-hover: #7c3aed; /* violet-600 */
+
+  /* Accent colors */
+  --color-accent: #f97316; /* orange-500 */
+  --color-accent-hover: #ea580c; /* orange-600 */
+
+  /* Background colors */
+  --color-background: #f9fafb; /* gray-50 */
+  --color-background-alt: #f3f4f6; /* gray-100 */
+
+  /* Surface colors */
+  --color-surface: #ffffff; /* white */
+  --color-surface-hover: #f3f4f6; /* gray-100 */
+
+  /* Text colors */
+  --color-text: #1f2937; /* gray-800 */
+  --color-text-muted: #6b7280; /* gray-500 */
+
+  /* Border colors */
+  --color-border: #e5e7eb; /* gray-200 */
+
+  /* Semantic colors */
+  --color-error: #ef4444; /* red-500 */
+  --color-success: #10b981; /* emerald-500 */
+  --color-warning: #f59e0b; /* amber-500 */
+  --color-info: #3b82f6; /* blue-500 */
+}
+
+/* Dark theme */
+.dark {
+  /* Primary colors with enhanced contrast */
+  --color-primary: #60a5fa; /* blue-400 */
+  --color-primary-hover: #3b82f6; /* blue-500 */
+  --color-primary-light: #93c5fd; /* blue-300 */
+
+  /* Secondary colors */
+  --color-secondary: #a78bfa; /* violet-400 */
+  --color-secondary-hover: #8b5cf6; /* violet-500 */
+
+  /* Accent colors */
+  --color-accent: #fb923c; /* orange-400 */
+  --color-accent-hover: #f97316; /* orange-500 */
+
+  /* Background colors */
+  --color-background: #111827; /* gray-900 */
+  --color-background-alt: #1f2937; /* gray-800 */
+
+  /* Surface colors */
+  --color-surface: #1f2937; /* gray-800 */
+  --color-surface-hover: #374151; /* gray-700 */
+
+  /* Text colors with enhanced contrast */
+  --color-text: #f9fafb; /* gray-50 */
+  --color-text-muted: #d1d5db; /* gray-300 */
+
+  /* Border colors with enhanced contrast */
+  --color-border: #4b5563; /* gray-600 */
+
+  /* Semantic colors */
+  --color-error: #f87171; /* red-400 */
+  --color-success: #34d399; /* emerald-400 */
+  --color-warning: #fbbf24; /* amber-400 */
+  --color-info: #60a5fa; /* blue-400 */
+}
+
+/* Additional utility classes */
+.bg-gradient-primary {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+}
+
+.text-gradient-primary {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
