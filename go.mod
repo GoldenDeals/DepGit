@@ -10,7 +10,6 @@ require (
 	github.com/go-git/go-git/v5 v5.14.0
 	github.com/gobwas/glob v0.2.3
 	github.com/google/uuid v1.6.0
-	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo/v4 v4.13.3
 	github.com/mattn/go-sqlite3 v1.14.27
 	github.com/minio/minio-go/v7 v7.0.89
